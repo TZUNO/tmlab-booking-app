@@ -178,7 +178,7 @@ function writeTeacherPatchesJson_(arr) {
 
 function appendBookingRow_(data) {
   var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAME);
+  var sheet = getSheetByNameTrim_(ss, SHEET_NAME);
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_NAME);
     sheet.appendRow(SHEET_HEADERS);
@@ -221,7 +221,8 @@ function deleteBookingRow_(data) {
   var slot = data["時段"] != null ? String(data["時段"]).trim() : "";
 
   var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAME);
+  /** 與 listBookings_ 一致，避免分頁名稱尾端空白時刪不到列 */
+  var sheet = getSheetByNameTrim_(ss, SHEET_NAME);
   if (!sheet) {
     return;
   }
@@ -251,7 +252,8 @@ function deleteBookingRow_(data) {
   for (var r2 = numRows - 1; r2 >= 1; r2--) {
     var row2 = values[r2];
     if (!row2) continue;
-    var rTs = row2[0] != null ? String(row2[0]).trim() : "";
+    /** 與 listBookings_／前端 timestamp 一致（A 欄為 Date 時不可只用 String） */
+    var rTs = cellToIsoOrString_(row2[0]).trim();
     var rName = row2[1] != null ? String(row2[1]).trim() : "";
     var rDate = cellDateYmd_(row2[2]);
     var rSlot = row2[3] != null ? String(row2[3]).trim() : "";
