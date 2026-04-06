@@ -133,6 +133,15 @@ export function hourlyTimeOptionsBooking(): string[] {
   return out;
 }
 
+/** 老師「新增開放時段」：整點 09:00–20:00（開始最晚 19:00、結束至 20:00） */
+export function hourlyTimeOptionsTeacherExtra(): string[] {
+  const out: string[] = [];
+  for (let h = 9; h <= 20; h += 1) {
+    out.push(`${String(h).padStart(2, "0")}:00`);
+  }
+  return out;
+}
+
 /** 結束時間選單：必須嚴格晚於開始時間 */
 export function endTimeOptionsAfter(start: string, all: string[]): string[] {
   const startM = timeToMinutes(start);

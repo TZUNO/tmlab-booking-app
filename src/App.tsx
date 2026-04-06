@@ -16,7 +16,7 @@ import {
   formatDateLabel,
   formatMonthTitle,
   getWeekdayHeaders,
-  hourlyTimeOptionsBooking,
+  hourlyTimeOptionsTeacherExtra,
   isCalendarDateBeforeToday,
   isHoliday,
   mergeOpenDateConfigs,
@@ -24,11 +24,12 @@ import {
   timeToMinutes,
   toDateString,
 } from "./date-utils";
+import { loadBookingsFromStorage, loadTeacherPatchesFromStorage, saveTeacherPatchesToStorage } from "./storage";
+import type { BookingFormValue, BookingRecord, CalendarDateView, OpenDateConfig, Topic } from "./types";
+import { WheelTimeSelect } from "./WheelTimeSelect";
 
 /** 表單「日期」下拉：含今日起共幾個曆日可選（跨月） */
 const FORM_BOOKING_WINDOW_DAYS = 30;
-import { loadBookingsFromStorage, loadTeacherPatchesFromStorage, saveTeacherPatchesToStorage } from "./storage";
-import type { BookingFormValue, BookingRecord, CalendarDateView, OpenDateConfig, Topic } from "./types";
 
 const EMPTY_FORM: BookingFormValue = {
   name: "",
@@ -53,11 +54,11 @@ const TEACHER_SLOT_PRESETS: { label: string; start: string; end: string }[] = [
 
 export default function App() {
   const todayStr = toDateString(new Date());
-  const timeChoices = useMemo(() => hourlyTimeOptionsBooking(), []);
-  /** 最晚可選開始時間 19:00（區間至 20:00） */
-  const slotStartChoices = useMemo(
-    () => timeChoices.filter((t) => timeToMinutes(t) <= 19 * 60),
-    [timeChoices]
+  /** 老師新增開放時段：09:00 起至 20:00；開始最晚 19:00 */
+  const teacherModalTimeChoices = useMemo(() => hourlyTimeOptionsTeacherExtra(), []);
+  const teacherSlotStartChoices = useMemo(
+    () => teacherModalTimeChoices.filter((t) => timeToMinutes(t) <= 19 * 60),
+    [teacherModalTimeChoices]
   );
 
   const [form, setForm] = useState<BookingFormValue>(EMPTY_FORM);
@@ -249,7 +250,7 @@ export default function App() {
       return;
     }
     const start = "16:00";
-    const end = coerceEndAfterStart(start, "17:00", timeChoices);
+    const end = coerceEndAfterStart(start, "17:00", teacherModalTimeChoices);
     setSlotStart(start);
     setSlotEnd(end);
     setAddSlotModal({ date });
@@ -270,15 +271,15 @@ export default function App() {
   }
 
   const endChoices = useMemo(
-    () => endTimeOptionsAfter(slotStart, timeChoices),
-    [slotStart, timeChoices]
+    () => endTimeOptionsAfter(slotStart, teacherModalTimeChoices),
+    [slotStart, teacherModalTimeChoices]
   );
 
   return (
     <div className="page">
       <header className="hero">
         <div className="hero-head">
-          <h1>東明研TMLab@NTUT 討論預約系統</h1>
+          <h1>東明研TMLab討論預約系統</h1>
           <button
             type="button"
             className={`teacher-mode-btn ${teacherEditMode ? "on" : ""}`}
@@ -611,39 +612,31 @@ export default function App() {
               ))}
             </div>
 
-            <div className="modal-row">
-              <label className="modal-field">
-                開始時間
-                <select
+            <div className="modal-row modal-row-wheels">
+              <div className="modal-field-wheel">
+                <span className="modal-field-label">開始時間</span>
+                <WheelTimeSelect
+                  ariaLabel="開始時間"
+                  options={teacherSlotStartChoices}
                   value={slotStart}
-                  onChange={(e) => {
-                    const s = e.target.value;
-                    const ends = endTimeOptionsAfter(s, timeChoices);
+                  onChange={(s) => {
+                    const ends = endTimeOptionsAfter(s, teacherModalTimeChoices);
                     setSlotStart(s);
                     setSlotEnd((prev) => (ends.includes(prev) ? prev : ends[0] ?? prev));
                   }}
-                >
-                  {slotStartChoices.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="modal-field">
-                結束時間
-                <select
-                  value={endChoices.includes(slotEnd) ? slotEnd : endChoices[0] ?? ""}
-                  onChange={(e) => setSlotEnd(e.target.value)}
+                />
+              </div>
+              <div className="modal-field-wheel">
+                <span className="modal-field-label">結束時間</span>
+                <WheelTimeSelect
+                  key={`end-${slotStart}-${endChoices[0] ?? ""}`}
+                  ariaLabel="結束時間"
+                  options={endChoices}
+                  value={endChoices.includes(slotEnd) ? slotEnd : endChoices[0] ?? slotEnd}
+                  onChange={setSlotEnd}
                   disabled={endChoices.length === 0}
-                >
-                  {endChoices.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                />
+              </div>
             </div>
             <p className="modal-hint">
               將新增：{slotStart}–{endChoices.includes(slotEnd) ? slotEnd : endChoices[0] ?? "—"}
