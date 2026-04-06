@@ -14,7 +14,7 @@ import {
   formatDateLabel,
   formatMonthTitle,
   getWeekdayHeaders,
-  hourlyTimeOptions,
+  hourlyTimeOptionsBooking,
   isCalendarDateBeforeToday,
   isHoliday,
   mergeOpenDateConfigs,
@@ -48,7 +48,12 @@ const TEACHER_SLOT_PRESETS: { label: string; start: string; end: string }[] = [
 
 export default function App() {
   const todayStr = toDateString(new Date());
-  const timeChoices = useMemo(() => hourlyTimeOptions(), []);
+  const timeChoices = useMemo(() => hourlyTimeOptionsBooking(), []);
+  /** 最晚可選開始時間 19:00（區間至 20:00） */
+  const slotStartChoices = useMemo(
+    () => timeChoices.filter((t) => timeToMinutes(t) <= 19 * 60),
+    [timeChoices]
+  );
 
   const [form, setForm] = useState<BookingFormValue>(EMPTY_FORM);
   /** 老師在編輯模式新增的時段（寫入 localStorage，重整後仍保留） */
@@ -269,7 +274,10 @@ export default function App() {
         </div>
         <p>
           固定開放：週一 / 週四（16:00 後）・國定假日不開放・填寫後即預約成功・預設地點：3F
-          研究室・表單日期僅列出「目前月曆月份」且「今日起」可預約日（一次開放一個月）
+          研究室・表單日期僅列出「目前月曆月份」且「今日起」可預約日
+        </p>
+        <p>
+          週一與週四以外時間請私訊老師確認是否額外開放，碩一以上要提報（口考）的同學，請自行注意討論的次數與研究進度，
         </p>
       </header>
 
@@ -592,7 +600,7 @@ export default function App() {
                     setSlotEnd((prev) => (ends.includes(prev) ? prev : ends[0] ?? prev));
                   }}
                 >
-                  {timeChoices.map((t) => (
+                  {slotStartChoices.map((t) => (
                     <option key={t} value={t}>
                       {t}
                     </option>

@@ -69,10 +69,19 @@ export function halfHourTimeOptions(): string[] {
   return out;
 }
 
-/** 整點一格，預設 08:00–21:00（填表／老師新增時段用） */
+/** 整點一格，預設 08:00–21:00（一般用途） */
 export function hourlyTimeOptions(): string[] {
   const out: string[] = [];
   for (let h = 8; h <= 21; h += 1) {
+    out.push(`${String(h).padStart(2, "0")}:00`);
+  }
+  return out;
+}
+
+/** 預約／老師新增：16:00–20:00 整點（最晚區間為 19:00–20:00） */
+export function hourlyTimeOptionsBooking(): string[] {
+  const out: string[] = [];
+  for (let h = 16; h <= 20; h += 1) {
     out.push(`${String(h).padStart(2, "0")}:00`);
   }
   return out;

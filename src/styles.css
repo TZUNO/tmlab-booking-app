@@ -77,6 +77,10 @@ main.layout {
   line-height: 1.5;
 }
 
+.hero p + p {
+  margin-top: 8px;
+}
+
 .layout {
   display: grid;
   gap: 16px;
