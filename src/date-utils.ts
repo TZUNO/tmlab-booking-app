@@ -49,6 +49,52 @@ export function isCalendarDateBeforeToday(dateStr: string): boolean {
   return dateStr < toDateString(new Date());
 }
 
+/** 日曆日加減（避免 DST 用正午錨定） */
+export function addCalendarDays(dateStr: string, days: number): string {
+  const d = new Date(`${dateStr}T12:00:00`);
+  d.setDate(d.getDate() + days);
+  return toDateString(d);
+}
+
+/**
+ * 含 startStr～endStr 內每個曆日：週一／週四固定開放（不含假日）＋ EXTRA_OPEN_DATES
+ */
+export function buildOpenDateConfigsForInclusiveRange(startStr: string, endStr: string): OpenDateConfig[] {
+  const map = new Map<string, OpenDateConfig>();
+  const start = new Date(`${startStr}T12:00:00`);
+  const end = new Date(`${endStr}T12:00:00`);
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const date = toDateString(d);
+    const wd = d.getDay();
+    if (wd === 1 || wd === 4) {
+      if (!isHoliday(date).isHoliday) {
+        map.set(date, {
+          date,
+          isExtraOpen: false,
+          slots: FIXED_TIME_SLOTS.map((time) => ({ time, source: "fixed" as const })),
+        });
+      }
+    }
+  }
+
+  for (const extra of EXTRA_OPEN_DATES) {
+    if (extra.date < startStr || extra.date > endStr) continue;
+    if (isHoliday(extra.date).isHoliday) continue;
+    const existing = map.get(extra.date);
+    const extraSlots = extra.slots.map((time) => ({ time, source: "extra" as const }));
+    if (existing) {
+      const merged = new Map(existing.slots.map((s) => [s.time, s]));
+      for (const slot of extraSlots) merged.set(slot.time, slot);
+      existing.slots = [...merged.values()].sort((a, b) => a.time.localeCompare(b.time));
+      existing.isExtraOpen = true;
+    } else {
+      map.set(extra.date, { date: extra.date, slots: extraSlots, isExtraOpen: true });
+    }
+  }
+
+  return [...map.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
 /** "HH:MM" → 當日分鐘數 */
 export function timeToMinutes(t: string): number {
   const [h, m] = t.split(":").map(Number);
@@ -101,7 +147,7 @@ export function coerceEndAfterStart(start: string, end: string, all: string[]): 
   return opts[0];
 }
 
-/** 僅產生「當月」內週一／週四固定開放（不含假日）；一次只開放一個曆月給表單用 */
+/** 產生「當月曆月」內週一／週四固定開放（不含假日）；供月曆顯示用 */
 export function buildOpenDateConfigsForMonth(cursor: Date): OpenDateConfig[] {
   const y = cursor.getFullYear();
   const m = cursor.getMonth();

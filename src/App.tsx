@@ -8,6 +8,8 @@ import {
 } from "./api";
 import { DURATION_OPTIONS, STUDENT_GROUPS, TOPIC_OPTIONS } from "./data";
 import {
+  addCalendarDays,
+  buildOpenDateConfigsForInclusiveRange,
   buildOpenDateConfigsForMonth,
   coerceEndAfterStart,
   endTimeOptionsAfter,
@@ -22,6 +24,9 @@ import {
   timeToMinutes,
   toDateString,
 } from "./date-utils";
+
+/** 表單「日期」下拉：含今日起共幾個曆日可選（跨月） */
+const FORM_BOOKING_WINDOW_DAYS = 30;
 import { loadTeacherPatchesFromStorage, saveTeacherPatchesToStorage } from "./storage";
 import type { BookingFormValue, BookingRecord, CalendarDateView, OpenDateConfig, Topic } from "./types";
 
@@ -101,26 +106,36 @@ export default function App() {
     return () => clearTimeout(t);
   }, [teacherPatches, syncReady]);
 
-  const viewingMonthKey = `${monthCursor.getFullYear()}-${String(monthCursor.getMonth() + 1).padStart(2, "0")}`;
+  const formRangeEndStr = useMemo(
+    () => addCalendarDays(todayStr, FORM_BOOKING_WINDOW_DAYS - 1),
+    [todayStr]
+  );
 
   const baseOpenThisMonth = useMemo(
     () => buildOpenDateConfigsForMonth(monthCursor),
     [monthCursor]
   );
 
-  const openDates = useMemo(
-    () => mergeOpenDateConfigs(baseOpenThisMonth, teacherPatches),
-    [baseOpenThisMonth, teacherPatches]
+  const baseOpenFormWindow = useMemo(
+    () => buildOpenDateConfigsForInclusiveRange(todayStr, formRangeEndStr),
+    [todayStr, formRangeEndStr]
   );
 
-  /** 表單僅列出「目前月曆檢視月份」且「今天起（含）」可預約日 */
+  /** 月曆＋表單：合併「今日起 30 天」與「目前檢視月」與老師額外開放 */
+  const openDates = useMemo(
+    () =>
+      mergeOpenDateConfigs(mergeOpenDateConfigs(baseOpenFormWindow, baseOpenThisMonth), teacherPatches),
+    [baseOpenFormWindow, baseOpenThisMonth, teacherPatches]
+  );
+
+  /** 表單僅列出「今天起（含）」30 天內可預約日（可跨月） */
   const dateOptions = useMemo(
     () =>
       openDates
-        .filter((d) => d.date.startsWith(viewingMonthKey) && d.date >= todayStr)
+        .filter((d) => d.date >= todayStr && d.date <= formRangeEndStr)
         .map((d) => d.date)
         .sort(),
-    [openDates, viewingMonthKey, todayStr]
+    [openDates, todayStr, formRangeEndStr]
   );
 
   useEffect(() => {
@@ -274,7 +289,7 @@ export default function App() {
         </div>
         <p>
           固定開放：週一 / 週四（16:00 後）・國定假日不開放・填寫後即預約成功・預設地點：3F
-          研究室・表單日期僅列出「目前月曆月份」且「今日起」可預約日
+          研究室・表單日期僅列出「今日起」30 天內可預約日（可跨月）
         </p>
         <p>
           週一與週四以外時間請私訊老師確認是否額外開放，碩一以上要提報（口考）的同學，請自行注意討論的次數與研究進度，
@@ -399,7 +414,15 @@ export default function App() {
 
         <div className="calendar-panel-host">
         <section className="panel calendar-panel">
-          <h2>預約行事曆時段總覽</h2>
+          <div className="calendar-panel-title">
+            <h2>預約行事曆時段總覽</h2>
+            <span
+              className={`calendar-title-note ${teacherEditMode ? "on" : ""}`}
+              aria-label={teacherEditMode ? "老師編輯模式：開啟後可編輯" : "僅供檢視"}
+            >
+              {teacherEditMode ? "老師編輯模式：開啟後可編輯" : "僅供檢視"}
+            </span>
+          </div>
           <div className="month-head">
             <strong>{formatMonthTitle(monthCursor)}</strong>
             <div className="month-actions">
