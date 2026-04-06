@@ -110,6 +110,37 @@ main.layout {
   font-size: 1.1rem;
 }
 
+.calendar-panel-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.calendar-panel-title h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.calendar-title-note {
+  font-size: 0.76rem;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 4px 10px;
+  border: 1px solid #d1d5db;
+  background: #f9fafb;
+  color: #6b7280;
+  white-space: nowrap;
+  line-height: 1.3;
+}
+
+.calendar-title-note.on {
+  border-color: #0f766e;
+  color: #0f766e;
+  background: #ecfeff;
+}
+
 .form {
   display: grid;
   gap: 12px;
