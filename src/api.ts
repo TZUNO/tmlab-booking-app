@@ -1,14 +1,9 @@
 import { INITIAL_BOOKINGS } from "./data";
-import { buildOpenDateConfigs } from "./date-utils";
-import type { BookingFormValue, BookingRecord, OpenDateConfig, SheetsPayload } from "./types";
+import type { BookingFormValue, BookingRecord, SheetsPayload } from "./types";
 
 const GAS_WEB_APP_URL = import.meta.env.VITE_GAS_WEB_APP_URL as string | undefined;
 
 let bookingStore: BookingRecord[] = [...INITIAL_BOOKINGS];
-
-export async function fetchOpenDates(): Promise<OpenDateConfig[]> {
-  return buildOpenDateConfigs(new Date(), 8);
-}
 
 export async function fetchBookings(): Promise<BookingRecord[]> {
   return [...bookingStore].sort((a, b) => a.date.localeCompare(b.date) || a.slot.localeCompare(b.slot));

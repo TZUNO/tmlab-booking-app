@@ -49,6 +49,112 @@ export function isCalendarDateBeforeToday(dateStr: string): boolean {
   return dateStr < toDateString(new Date());
 }
 
+/** "HH:MM" → 當日分鐘數 */
+export function timeToMinutes(t: string): number {
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
+}
+
+/** 半小時一格，預設 08:00–21:30（老師額外開放用） */
+export function halfHourTimeOptions(): string[] {
+  const out: string[] = [];
+  let minutes = 8 * 60;
+  const end = 21 * 60 + 30;
+  while (minutes <= end) {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    out.push(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
+    minutes += 30;
+  }
+  return out;
+}
+
+/** 結束時間選單：必須嚴格晚於開始時間 */
+export function endTimeOptionsAfter(start: string, all: string[]): string[] {
+  const startM = timeToMinutes(start);
+  return all.filter((t) => timeToMinutes(t) > startM);
+}
+
+/** 若目前結束時間不合法，回傳第一個可選的結束時間 */
+export function coerceEndAfterStart(start: string, end: string, all: string[]): string {
+  const opts = endTimeOptionsAfter(start, all);
+  if (opts.length === 0) return end;
+  if (timeToMinutes(end) > timeToMinutes(start) && opts.includes(end)) return end;
+  return opts[0];
+}
+
+/** 僅產生「當月」內週一／週四固定開放（不含假日）；一次只開放一個曆月給表單用 */
+export function buildOpenDateConfigsForMonth(cursor: Date): OpenDateConfig[] {
+  const y = cursor.getFullYear();
+  const m = cursor.getMonth();
+  const lastDay = new Date(y, m + 1, 0).getDate();
+  const map = new Map<string, OpenDateConfig>();
+
+  for (let day = 1; day <= lastDay; day += 1) {
+    const d = new Date(y, m, day);
+    const wd = d.getDay();
+    if (wd === 1 || wd === 4) {
+      const date = toDateString(d);
+      if (!isHoliday(date).isHoliday) {
+        map.set(date, {
+          date,
+          isExtraOpen: false,
+          slots: FIXED_TIME_SLOTS.map((time) => ({ time, source: "fixed" as const })),
+        });
+      }
+    }
+  }
+
+  for (const extra of EXTRA_OPEN_DATES) {
+    const ed = new Date(`${extra.date}T12:00:00`);
+    if (ed.getFullYear() !== y || ed.getMonth() !== m) continue;
+    if (isHoliday(extra.date).isHoliday) continue;
+    const existing = map.get(extra.date);
+    const extraSlots = extra.slots.map((time) => ({ time, source: "extra" as const }));
+    if (existing) {
+      const merged = new Map(existing.slots.map((s) => [s.time, s]));
+      for (const slot of extraSlots) merged.set(slot.time, slot);
+      existing.slots = [...merged.values()].sort((a, b) => a.time.localeCompare(b.time));
+      existing.isExtraOpen = true;
+    } else {
+      map.set(extra.date, { date: extra.date, slots: extraSlots, isExtraOpen: true });
+    }
+  }
+
+  return [...map.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** 將老師補上的時段合併到當月基底（同日期合併 slot 清單） */
+export function mergeOpenDateConfigs(base: OpenDateConfig[], patches: OpenDateConfig[]): OpenDateConfig[] {
+  const map = new Map<string, OpenDateConfig>();
+  for (const d of base) {
+    map.set(d.date, {
+      date: d.date,
+      isExtraOpen: d.isExtraOpen,
+      slots: [...d.slots],
+    });
+  }
+  for (const p of patches) {
+    const existing = map.get(p.date);
+    if (!existing) {
+      map.set(p.date, {
+        date: p.date,
+        isExtraOpen: p.isExtraOpen,
+        slots: [...p.slots],
+      });
+    } else {
+      const slotMap = new Map(existing.slots.map((s) => [s.time, s]));
+      for (const s of p.slots) {
+        slotMap.set(s.time, s);
+      }
+      existing.slots = [...slotMap.values()].sort((a, b) => a.time.localeCompare(b.time));
+      existing.isExtraOpen = existing.isExtraOpen || p.isExtraOpen;
+    }
+  }
+  return [...map.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** @deprecated 請改用 buildOpenDateConfigsForMonth；保留供舊程式參考 */
 export function buildOpenDateConfigs(from = new Date(), weeks = 6): OpenDateConfig[] {
   const map = new Map<string, OpenDateConfig>();
   const start = new Date(from);

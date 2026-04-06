@@ -1,14 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
-import { createBooking, deleteBooking, fetchBookings, fetchOpenDates } from "./api";
+import { createBooking, deleteBooking, fetchBookings } from "./api";
 import { DURATION_OPTIONS, STUDENT_GROUPS, TOPIC_OPTIONS } from "./data";
 import {
+  buildOpenDateConfigsForMonth,
+  coerceEndAfterStart,
+  endTimeOptionsAfter,
   formatDateLabel,
   formatMonthTitle,
   getWeekdayHeaders,
+  halfHourTimeOptions,
   isCalendarDateBeforeToday,
   isHoliday,
-  isMondayOrThursday,
+  mergeOpenDateConfigs,
   startOfMonthGrid,
+  timeToMinutes,
   toDateString,
 } from "./date-utils";
 import type { BookingFormValue, BookingRecord, CalendarDateView, OpenDateConfig, Topic } from "./types";
@@ -26,26 +31,73 @@ function topicText(topics: Topic[]): string {
   return topics.length ? topics.join("、") : "未填";
 }
 
+/** 「16:00-16:30」→「1600」，月曆泡泡用（無冒號） */
+function slotStartCompactDigits(slotRange: string): string {
+  const start = slotRange.split("-")[0]?.trim() ?? "";
+  return start.replace(/:/g, "");
+}
+
+/** 老師一鍵帶入常見時段 */
+const TEACHER_SLOT_PRESETS: { label: string; start: string; end: string }[] = [
+  { label: "16:00–17:00", start: "16:00", end: "17:00" },
+  { label: "17:00–18:00", start: "17:00", end: "18:00" },
+  { label: "18:30–19:30", start: "18:30", end: "19:30" },
+  { label: "19:00–20:00", start: "19:00", end: "20:00" },
+];
+
 export default function App() {
   const todayStr = toDateString(new Date());
+  const timeChoices = useMemo(() => halfHourTimeOptions(), []);
 
   const [form, setForm] = useState<BookingFormValue>(EMPTY_FORM);
-  const [openDates, setOpenDates] = useState<OpenDateConfig[]>([]);
+  /** 老師在編輯模式新增的時段（跨月保留，與當月基底合併） */
+  const [teacherPatches, setTeacherPatches] = useState<OpenDateConfig[]>([]);
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [monthCursor, setMonthCursor] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [teacherEditMode, setTeacherEditMode] = useState(false);
+  /** 老師新增額外開放時段：用下拉選單選開始／結束時間 */
+  const [addSlotModal, setAddSlotModal] = useState<{ date: string } | null>(null);
+  const [slotStart, setSlotStart] = useState("16:00");
+  const [slotEnd, setSlotEnd] = useState("17:00");
 
   useEffect(() => {
-    Promise.all([fetchOpenDates(), fetchBookings()]).then(([dateConfigs, bookingData]) => {
-      setOpenDates(dateConfigs);
-      setBookings(bookingData);
-    });
+    fetchBookings().then(setBookings);
   }, []);
 
-  const dateOptions = openDates.map((d) => d.date);
+  const viewingMonthKey = `${monthCursor.getFullYear()}-${String(monthCursor.getMonth() + 1).padStart(2, "0")}`;
+
+  const baseOpenThisMonth = useMemo(
+    () => buildOpenDateConfigsForMonth(monthCursor),
+    [monthCursor]
+  );
+
+  const openDates = useMemo(
+    () => mergeOpenDateConfigs(baseOpenThisMonth, teacherPatches),
+    [baseOpenThisMonth, teacherPatches]
+  );
+
+  /** 表單僅列出「目前月曆檢視月份」且「今天起（含）」可預約日 */
+  const dateOptions = useMemo(
+    () =>
+      openDates
+        .filter((d) => d.date.startsWith(viewingMonthKey) && d.date >= todayStr)
+        .map((d) => d.date)
+        .sort(),
+    [openDates, viewingMonthKey, todayStr]
+  );
+
+  useEffect(() => {
+    setForm((f) => {
+      if (!f.date) return f;
+      if (!dateOptions.includes(f.date)) {
+        return { ...f, date: "", slot: "" };
+      }
+      return f;
+    });
+  }, [dateOptions]);
   const slotOptions = useMemo(
     () => openDates.find((d) => d.date === form.date)?.slots.map((slot) => slot.time) ?? [],
     [form.date, openDates]
@@ -118,45 +170,17 @@ export default function App() {
     setBookings(updated);
   }
 
-  function addExtraOpenSlot(date: string) {
-    const holiday = isHoliday(date);
-    if (holiday.isHoliday) {
-      setMessage("國定假日不可新增開放時段。");
-      return;
-    }
-
-    const value = window.prompt(
-      "請輸入要新增的時段（HH:MM-HH:MM），可用逗號分隔多個。\n例如：18:30-19:00,19:00-19:30"
-    );
-    if (!value) return;
-
-    const parsed = value
-      .split(",")
-      .map((v) => v.trim())
-      .filter(Boolean);
-
-    const isValid = parsed.every((v) => /^\d{2}:\d{2}-\d{2}:\d{2}$/.test(v));
-    if (!isValid) {
-      setMessage("時段格式錯誤，請使用 HH:MM-HH:MM。");
-      return;
-    }
-
-    setOpenDates((prev) => {
+  function mergeExtraSlots(date: string, slotTimes: string[]) {
+    const newSlots = slotTimes.map((time) => ({ time, source: "extra" as const }));
+    setTeacherPatches((prev) => {
       const found = prev.find((item) => item.date === date);
       if (!found) {
-        return [
-          ...prev,
-          {
-            date,
-            isExtraOpen: true,
-            slots: parsed.map((time) => ({ time, source: "extra" as const })),
-          },
-        ].sort((a, b) => a.date.localeCompare(b.date));
+        return [...prev, { date, isExtraOpen: true, slots: newSlots }].sort((a, b) =>
+          a.date.localeCompare(b.date)
+        );
       }
-
       const merged = new Map(found.slots.map((slot) => [slot.time, slot]));
-      for (const time of parsed) merged.set(time, { time, source: "extra" as const });
-
+      for (const s of newSlots) merged.set(s.time, s);
       return prev.map((item) =>
         item.date === date
           ? {
@@ -167,9 +191,39 @@ export default function App() {
           : item
       );
     });
-
-    setMessage(`已新增 ${date} 的額外時段。`);
   }
+
+  function openAddSlotModal(date: string) {
+    const holiday = isHoliday(date);
+    if (holiday.isHoliday) {
+      setMessage("國定假日不可新增開放時段。");
+      return;
+    }
+    const start = "16:00";
+    const end = coerceEndAfterStart(start, "17:00", timeChoices);
+    setSlotStart(start);
+    setSlotEnd(end);
+    setAddSlotModal({ date });
+  }
+
+  function confirmAddSlotFromModal() {
+    if (!addSlotModal) return;
+    const { date } = addSlotModal;
+    const endResolved = endChoices.includes(slotEnd) ? slotEnd : endChoices[0];
+    if (!endResolved || timeToMinutes(endResolved) <= timeToMinutes(slotStart)) {
+      setMessage("結束時間須晚於開始時間。");
+      return;
+    }
+    const range = `${slotStart}-${endResolved}`;
+    mergeExtraSlots(date, [range]);
+    setAddSlotModal(null);
+    setMessage(`已新增 ${formatDateLabel(date)} 時段：${range}`);
+  }
+
+  const endChoices = useMemo(
+    () => endTimeOptionsAfter(slotStart, timeChoices),
+    [slotStart, timeChoices]
+  );
 
   return (
     <div className="page">
@@ -184,7 +238,10 @@ export default function App() {
             {teacherEditMode ? "老師編輯模式：開啟" : "老師編輯模式：關閉"}
           </button>
         </div>
-        <p>固定開放：週一 / 週四（16:00 後）・國定假日不開放・填寫後即預約成功・預設地點：3F 研究室</p>
+        <p>
+          固定開放：週一 / 週四（16:00 後）・國定假日不開放・填寫後即預約成功・預設地點：3F
+          研究室・表單日期僅列出「目前月曆月份」且「今日起」可預約日（一次開放一個月）
+        </p>
       </header>
 
       <main className="layout">
@@ -320,76 +377,99 @@ export default function App() {
             </div>
           </div>
 
-          <div className="weekday-row">
-            {getWeekdayHeaders().map((name) => (
-              <div key={name}>{name}</div>
-            ))}
-          </div>
-          <div className="month-grid">
-            {calendarData.map((day) => {
-              const inCurrentMonth = monthCursor.getMonth() === new Date(`${day.date}T00:00:00`).getMonth();
-              const totalBookings = day.slots.reduce((acc, slot) => acc + slot.bookings.length, 0);
-              const canTeacherAdd = teacherEditMode && !day.isHoliday && day.slots.length === 0;
-              const isPast = isCalendarDateBeforeToday(day.date);
-              const isFixedOpenWeekday = isMondayOrThursday(day.date);
-              return (
-                <article
-                  key={day.date}
-                  className={[
-                    "month-cell",
-                    !inCurrentMonth ? "outside" : "",
-                    day.isHoliday ? "holiday" : "",
-                    isPast ? "past" : "",
-                    isFixedOpenWeekday && !day.isHoliday ? "fixed-open" : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                  onClick={() => setSelectedDate(day.date)}
-                >
-                  <div className="cell-head">
-                    <span>{new Date(`${day.date}T00:00:00`).getDate()}</span>
-                    <div className="badges">
-                      {day.isHoliday ? <span className="badge holiday">休</span> : null}
-                      {!day.isHoliday && day.isExtraOpen ? <span className="badge extra">額外</span> : null}
-                      {canTeacherAdd ? (
-                        <button
-                          type="button"
-                          className="add-open-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            addExtraOpenSlot(day.date);
-                          }}
-                        >
-                          + 老師新增
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                  <div className="cell-body">
-                    {day.isHoliday ? (
-                      <p className="holiday-text">{day.holidayName}</p>
-                    ) : totalBookings === 0 ? (
-                      <p className="empty">
-                        {!day.slots.length
-                          ? "未開放"
-                          : isFixedOpenWeekday
-                            ? "尚無預約"
-                            : "未開放"}
-                      </p>
-                    ) : (
-                      day.slots
-                        .filter((slot) => slot.bookings.length > 0)
-                        .slice(0, 3)
-                        .map((slot) => (
-                          <p key={`${day.date}-${slot.time}`} className="event-line">
-                            {slot.time} {slot.bookings.map((b) => b.name).join("、")}
-                          </p>
-                        ))
-                    )}
-                  </div>
-                </article>
-              );
-            })}
+          <div className="month-calendar-viewport">
+            <div className="month-calendar-inner">
+              <div className="weekday-row">
+                {getWeekdayHeaders().map((name) => (
+                  <div key={name}>{name}</div>
+                ))}
+              </div>
+              <div className="month-grid">
+                {calendarData.map((day) => {
+                  const inCurrentMonth =
+                    monthCursor.getMonth() === new Date(`${day.date}T00:00:00`).getMonth();
+                  const totalBookings = day.slots.reduce((acc, slot) => acc + slot.bookings.length, 0);
+                  const canTeacherAdd = teacherEditMode && !day.isHoliday && day.slots.length === 0;
+                  const isPast = isCalendarDateBeforeToday(day.date);
+                  const hasOpenSlots = day.slots.length > 0 && !day.isHoliday;
+                  const isBookableGreen = hasOpenSlots && !isPast;
+                  return (
+                    <article
+                      key={day.date}
+                      className={[
+                        "month-cell",
+                        !inCurrentMonth ? "outside" : "",
+                        day.isHoliday ? "holiday" : "",
+                        isPast ? "past" : "",
+                        isBookableGreen ? "bookable-open" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      onClick={() => setSelectedDate(day.date)}
+                    >
+                      <div className="cell-head">
+                        <span>{new Date(`${day.date}T00:00:00`).getDate()}</span>
+                        <div className="badges">
+                          {day.isHoliday ? <span className="badge holiday">休</span> : null}
+                          {!day.isHoliday && day.isExtraOpen ? <span className="badge extra">額外</span> : null}
+                          {canTeacherAdd ? (
+                            <button
+                              type="button"
+                              className="add-open-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openAddSlotModal(day.date);
+                              }}
+                            >
+                              + 老師新增
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="cell-body">
+                        {day.isHoliday ? (
+                          <p className="holiday-text">{day.holidayName}</p>
+                        ) : totalBookings === 0 ? (
+                          day.slots.length > 0 ? (
+                            <p className="empty">尚無預約</p>
+                          ) : null
+                        ) : (
+                          (() => {
+                            const bubbleItems = day.slots
+                              .filter((slot) => slot.bookings.length > 0)
+                              .flatMap((slot) =>
+                                slot.bookings.map((b) => ({ booking: b, slotTime: slot.time }))
+                              );
+                            const maxShow = 6;
+                            const shown = bubbleItems.slice(0, maxShow);
+                            const more = bubbleItems.length - shown.length;
+                            return (
+                              <div className="cell-booking-bubbles">
+                                {shown.map(({ booking: b, slotTime }) => (
+                                  <span
+                                    key={b.id}
+                                    className="booking-bubble"
+                                    title={`${slotTime} · ${b.name}`}
+                                  >
+                                    <span className="booking-bubble-time">{slotStartCompactDigits(slotTime)}</span>
+                                    <span className="booking-bubble-name">{b.name}</span>
+                                  </span>
+                                ))}
+                                {more > 0 ? (
+                                  <span className="booking-bubble booking-bubble-more" title={`另有 ${more} 筆`}>
+                                    +{more}
+                                  </span>
+                                ) : null}
+                              </div>
+                            );
+                          })()
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           <div className="detail-board">
@@ -440,6 +520,90 @@ export default function App() {
           </div>
         </section>
       </main>
+
+      {addSlotModal ? (
+        <div className="modal-backdrop" onClick={() => setAddSlotModal(null)} role="presentation">
+          <div
+            className="modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="add-slot-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="add-slot-title">新增開放時段</h3>
+            <p className="modal-sub">{formatDateLabel(addSlotModal.date)}</p>
+
+            <p className="modal-label">快速選擇</p>
+            <div className="modal-presets">
+              {TEACHER_SLOT_PRESETS.map((p) => (
+                <button
+                  key={p.label}
+                  type="button"
+                  className="preset-chip"
+                  onClick={() => {
+                    setSlotStart(p.start);
+                    setSlotEnd(p.end);
+                  }}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="modal-row">
+              <label className="modal-field">
+                開始時間
+                <select
+                  value={slotStart}
+                  onChange={(e) => {
+                    const s = e.target.value;
+                    const ends = endTimeOptionsAfter(s, timeChoices);
+                    setSlotStart(s);
+                    setSlotEnd((prev) => (ends.includes(prev) ? prev : ends[0] ?? prev));
+                  }}
+                >
+                  {timeChoices.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="modal-field">
+                結束時間
+                <select
+                  value={endChoices.includes(slotEnd) ? slotEnd : endChoices[0] ?? ""}
+                  onChange={(e) => setSlotEnd(e.target.value)}
+                  disabled={endChoices.length === 0}
+                >
+                  {endChoices.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <p className="modal-hint">
+              將新增：{slotStart}–{endChoices.includes(slotEnd) ? slotEnd : endChoices[0] ?? "—"}
+            </p>
+
+            <div className="modal-actions">
+              <button type="button" className="modal-btn secondary" onClick={() => setAddSlotModal(null)}>
+                取消
+              </button>
+              <button
+                type="button"
+                className="modal-btn primary"
+                onClick={confirmAddSlotFromModal}
+                disabled={endChoices.length === 0}
+              >
+                確認新增
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

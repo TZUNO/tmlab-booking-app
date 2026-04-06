@@ -179,10 +179,24 @@ textarea {
   cursor: pointer;
 }
 
+/* 手機也維持 7 欄：窄螢幕時整塊可橫向捲動，星期列與格子對齊 */
+.month-calendar-viewport {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+.month-calendar-inner {
+  width: 100%;
+  min-width: 0;
+}
+
 .weekday-row {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   margin-bottom: 6px;
+  min-width: 100%;
 }
 
 .weekday-row div {
@@ -199,6 +213,7 @@ textarea {
   border-radius: 12px;
   overflow: hidden;
   margin-bottom: 12px;
+  min-width: 100%;
 }
 
 .month-cell {
@@ -223,20 +238,30 @@ textarea {
   background: #fff7ed;
 }
 
-/* 固定開放：週一 / 週四（非國定假日） */
-.month-cell.fixed-open {
+/* 當日有可預約時段（含老師額外開放），且非已過日期：淺綠底 */
+.month-cell.bookable-open {
   background: #e8f5e9;
 }
 
-/* 已過日期：對齊「今天」之前，整格壓暗 */
+/* 已過日期：再加深，與未來區隔 */
 .month-cell.past {
-  opacity: 0.55;
-  filter: grayscale(0.25);
-  color: #6b7280;
+  opacity: 0.88;
+  filter: grayscale(0.55) brightness(0.92);
+  background: #cbd5e1 !important;
+  color: #475569;
+}
+
+.month-cell.past.outside {
+  background: #e2e8f0 !important;
 }
 
 .month-cell.past .cell-head span {
-  color: #4b5563;
+  color: #334155;
+}
+
+.month-cell.past .holiday-text,
+.month-cell.past .empty {
+  color: #64748b;
 }
 
 .cell-head {
@@ -257,13 +282,49 @@ textarea {
   gap: 3px;
 }
 
-.event-line {
-  margin: 0;
-  font-size: 0.78rem;
-  color: #0f172a;
+.cell-booking-bubbles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.booking-bubble {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.2;
+  background: #e0f2fe;
+  color: #0c4a6e;
+  border: 1px solid #7dd3fc;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.booking-bubble-time {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  font-size: 0.92em;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.booking-bubble-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 700;
+}
+
+.booking-bubble-more {
+  background: #f1f5f9;
+  color: #64748b;
+  border-color: #cbd5e1;
+  font-weight: 600;
 }
 
 .add-open-btn {
@@ -390,12 +451,174 @@ textarea {
     flex-direction: column;
     align-items: flex-start;
   }
+}
 
-  .month-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+/* 窄螢幕：維持週日～週六一列；內容區最小寬度避免擠壞，可左右滑動 */
+@media (max-width: 720px) {
+  .month-calendar-inner {
+    min-width: 520px;
   }
 
-  .weekday-row {
-    display: none;
+  .weekday-row div {
+    font-size: 0.68rem;
+    padding: 3px 1px;
+    line-height: 1.2;
+  }
+
+  .month-cell {
+    min-height: 86px;
+    padding: 4px 3px;
+  }
+
+  .cell-head span {
+    font-size: 0.78rem;
+  }
+
+  .booking-bubble {
+    font-size: 0.62rem;
+    padding: 2px 5px;
+  }
+
+  .holiday-text,
+  .month-cell .empty {
+    font-size: 0.68rem;
+  }
+
+  .add-open-btn {
+    font-size: 0.62rem;
+    padding: 1px 4px;
+  }
+
+  .badge {
+    font-size: 0.68rem;
+    padding: 1px 5px;
+  }
+}
+
+/* ── 老師新增時段：彈窗 ── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 50;
+}
+
+.modal-card {
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.12);
+  max-width: 400px;
+  width: 100%;
+  padding: 18px 18px 16px;
+}
+
+.modal-card h3 {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+}
+
+.modal-sub {
+  margin: 0 0 14px;
+  color: #6b7280;
+  font-size: 0.88rem;
+}
+
+.modal-label {
+  margin: 0 0 6px;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.modal-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.preset-chip {
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  font: inherit;
+}
+
+.preset-chip:hover {
+  border-color: #0f766e;
+  color: #0f766e;
+  background: #ecfeff;
+}
+
+.modal-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.modal-field {
+  display: grid;
+  gap: 4px;
+  font-size: 0.82rem;
+  color: #374151;
+}
+
+.modal-field select {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  font: inherit;
+  background: #fff;
+}
+
+.modal-hint {
+  margin: 0 0 14px;
+  font-size: 0.82rem;
+  color: #0f766e;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.modal-btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.modal-btn.secondary {
+  background: #fff;
+  border-color: #d1d5db;
+  color: #64748b;
+}
+
+.modal-btn.primary {
+  background: #0f766e;
+  border-color: #0f766e;
+  color: #fff;
+}
+
+.modal-btn.primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 480px) {
+  .modal-row {
+    grid-template-columns: 1fr;
   }
 }
