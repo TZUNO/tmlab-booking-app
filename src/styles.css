@@ -82,6 +82,7 @@ main.layout {
   gap: 16px;
   grid-template-columns: 1fr;
   width: 100%;
+  min-width: 0;
   box-sizing: border-box;
 }
 
@@ -91,6 +92,7 @@ main.layout {
   border-radius: 16px;
   padding: var(--card-padding-y) var(--card-padding-x);
   width: 100%;
+  min-width: 0;
   box-sizing: border-box;
 }
 
