@@ -113,14 +113,35 @@ main.layout {
 .calendar-panel-title {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-start;
+  gap: 8px 12px;
   margin-bottom: 14px;
+}
+
+.calendar-panel-title-text {
+  flex: 1;
+  min-width: min(100%, 220px);
 }
 
 .calendar-panel-title h2 {
   margin: 0;
   font-size: 1.1rem;
+}
+
+.panel-policy-note {
+  margin: 8px 0 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: #64748b;
+}
+
+.form-panel > .panel-policy-note {
+  margin: 0 0 14px;
+}
+
+.panel-policy-note--compact {
+  margin: 4px 0 0;
+  max-width: 42ch;
 }
 
 .calendar-title-note {

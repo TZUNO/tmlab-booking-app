@@ -396,6 +396,9 @@ export default function App() {
       <main className="layout">
         <section className="panel form-panel">
           <h2>填表預約</h2>
+          <p className="panel-policy-note" role="note">
+            若要改日期、時段或耗時，請先在右側行事曆明細刪除原預約，再於此重新填寫（不提供線上修改）。
+          </p>
           <form onSubmit={onSubmit} className="form">
             <label>
               姓名
@@ -524,7 +527,12 @@ export default function App() {
           aria-busy={!syncReady || calendarBackgroundSyncing}
         >
           <div className="calendar-panel-title">
-            <h2>預約行事曆時段總覽</h2>
+            <div className="calendar-panel-title-text">
+              <h2>預約行事曆時段總覽</h2>
+              <p className="panel-policy-note panel-policy-note--compact" role="note">
+                變更預約請刪除該筆後，至左側表單重新預約。
+              </p>
+            </div>
             {syncReady && calendarBackgroundSyncing ? (
               <span className="calendar-sync-inline" role="status" aria-live="polite">
                 <span className="calendar-sync-spinner calendar-sync-spinner--sm" aria-hidden />
