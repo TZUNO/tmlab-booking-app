@@ -78,6 +78,10 @@ export default function App() {
   const [slotEnd, setSlotEnd] = useState("17:00");
   /** 首次從 GAS／本機載入完成前，不把 teacherPatches 推上試算表，避免覆寫遠端 */
   const [syncReady, setSyncReady] = useState(false);
+  /** 與 useRef 同步，供事件 handler 判斷是否已完成初次載入 */
+  const syncReadyRef = useRef(false);
+  /** 初次載入後，背景 getState 進行中（切回分頁／focus 等） */
+  const [calendarBackgroundSyncing, setCalendarBackgroundSyncing] = useState(false);
   /** 本機正在編輯額外時段時，背景同步勿覆寫 teacherPatches（避免未存回的變更被舊的試算表狀態蓋掉） */
   const teacherPatchesDirtyRef = useRef(false);
   /** 與 debounce 搭配：僅「對應到目前這版 patches 的那次存檔」完成時才清除 dirty */
@@ -96,6 +100,7 @@ export default function App() {
         setBookings(list);
       }
       setSyncReady(true);
+      syncReadyRef.current = true;
     })();
     return () => {
       cancelled = true;
@@ -106,16 +111,20 @@ export default function App() {
   const lastBackgroundSyncRef = useRef(0);
   useEffect(() => {
     const run = () => {
+      if (!syncReadyRef.current) return;
       const now = Date.now();
       if (now - lastBackgroundSyncRef.current < 2500) return;
       lastBackgroundSyncRef.current = now;
-      void syncAppStateFromServer().then((state) => {
-        if (!state) return;
-        setBookings(state.bookings);
-        if (!teacherPatchesDirtyRef.current) {
-          setTeacherPatches(state.teacherPatches);
-        }
-      });
+      setCalendarBackgroundSyncing(true);
+      void syncAppStateFromServer()
+        .then((state) => {
+          if (!state) return;
+          setBookings(state.bookings);
+          if (!teacherPatchesDirtyRef.current) {
+            setTeacherPatches(state.teacherPatches);
+          }
+        })
+        .finally(() => setCalendarBackgroundSyncing(false));
     };
     const onVis = () => {
       if (document.visibilityState === "visible") run();
@@ -510,9 +519,18 @@ export default function App() {
         </section>
 
         <div className="calendar-panel-host">
-        <section className="panel calendar-panel">
+        <section
+          className="panel calendar-panel"
+          aria-busy={!syncReady || calendarBackgroundSyncing}
+        >
           <div className="calendar-panel-title">
             <h2>預約行事曆時段總覽</h2>
+            {syncReady && calendarBackgroundSyncing ? (
+              <span className="calendar-sync-inline" role="status" aria-live="polite">
+                <span className="calendar-sync-spinner calendar-sync-spinner--sm" aria-hidden />
+                後端同步中…
+              </span>
+            ) : null}
             <span
               className={`calendar-title-note ${teacherEditMode ? "on" : ""}`}
               aria-label={teacherEditMode ? "老師編輯模式：開啟後可編輯" : "僅供檢視"}
@@ -520,6 +538,14 @@ export default function App() {
               {teacherEditMode ? "老師編輯模式：開啟後可編輯" : "僅供檢視"}
             </span>
           </div>
+          <div className="calendar-sync-body">
+            {!syncReady ? (
+              <div className="calendar-sync-overlay" role="status" aria-live="polite">
+                <div className="calendar-sync-spinner" aria-hidden />
+                <span>後端同步中…</span>
+              </div>
+            ) : null}
+            <div className={!syncReady ? "calendar-sync-content calendar-sync-content--blocked" : "calendar-sync-content"}>
           <div className="month-head">
             <strong>{formatMonthTitle(monthCursor)}</strong>
             <div className="month-actions">
@@ -685,6 +711,8 @@ export default function App() {
             ) : (
               <p className="empty">請在月曆中點選日期查看明細。</p>
             )}
+          </div>
+            </div>
           </div>
         </section>
         </div>
