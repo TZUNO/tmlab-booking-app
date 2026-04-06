@@ -16,7 +16,14 @@ export const TOPIC_OPTIONS: Topic[] = ["計劃執行", "生涯", "純聊天", "�
 
 export const DURATION_OPTIONS = [10, 20, 30, 60, 90, 120];
 
-export const FIXED_TIME_SLOTS = ["16:00-16:30", "16:30-17:00", "17:00-17:30", "17:30-18:00"];
+/** 週一／週四固定開放：一小時一區間 */
+export const FIXED_TIME_SLOTS = [
+  "16:00-17:00",
+  "17:00-18:00",
+  "18:00-19:00",
+  "19:00-20:00",
+  "20:00-21:00",
+];
 
 // 預設不放額外開放日，僅由老師在月曆以 + 新增。
 export const EXTRA_OPEN_DATES: Array<{ date: string; slots: string[] }> = [];
@@ -32,7 +39,7 @@ export const INITIAL_BOOKINGS: BookingRecord[] = [
     timestamp: "2026-04-03T09:20:00.000Z",
     name: "林羿伶",
     date: "2026-04-09",
-    slot: "16:00-16:30",
+    slot: "16:00-17:00",
     duration: 30,
     topics: ["碩博論"],
     note: "想討論論文架構與研究方法。",
@@ -42,7 +49,7 @@ export const INITIAL_BOOKINGS: BookingRecord[] = [
     timestamp: "2026-04-03T10:30:00.000Z",
     name: "侯政伯",
     date: "2026-04-09",
-    slot: "16:00-16:30",
+    slot: "17:00-18:00",
     duration: 20,
     topics: ["研討會或期刊", "計劃執行"],
     note: "",
@@ -52,7 +59,7 @@ export const INITIAL_BOOKINGS: BookingRecord[] = [
     timestamp: "2026-04-04T08:50:00.000Z",
     name: "李佳珍",
     date: "2026-04-13",
-    slot: "16:30-17:00",
+    slot: "18:00-19:00",
     duration: 60,
     topics: ["生涯"],
     note: "想聊研究職涯與投稿規劃。",

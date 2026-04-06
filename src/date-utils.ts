@@ -55,7 +55,7 @@ export function timeToMinutes(t: string): number {
   return h * 60 + m;
 }
 
-/** 半小時一格，預設 08:00–21:30（老師額外開放用） */
+/** 半小時一格，預設 08:00–21:30（保留供舊邏輯參考） */
 export function halfHourTimeOptions(): string[] {
   const out: string[] = [];
   let minutes = 8 * 60;
@@ -65,6 +65,15 @@ export function halfHourTimeOptions(): string[] {
     const m = minutes % 60;
     out.push(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
     minutes += 30;
+  }
+  return out;
+}
+
+/** 整點一格，預設 08:00–21:00（填表／老師新增時段用） */
+export function hourlyTimeOptions(): string[] {
+  const out: string[] = [];
+  for (let h = 8; h <= 21; h += 1) {
+    out.push(`${String(h).padStart(2, "0")}:00`);
   }
   return out;
 }

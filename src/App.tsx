@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { createBooking, deleteBooking, fetchBookings } from "./api";
+import {
+  createBooking,
+  deleteBooking,
+  fetchBookings,
+  saveTeacherPatchesRemote,
+  syncAppStateFromServer,
+} from "./api";
 import { DURATION_OPTIONS, STUDENT_GROUPS, TOPIC_OPTIONS } from "./data";
 import {
   buildOpenDateConfigsForMonth,
@@ -8,7 +14,7 @@ import {
   formatDateLabel,
   formatMonthTitle,
   getWeekdayHeaders,
-  halfHourTimeOptions,
+  hourlyTimeOptions,
   isCalendarDateBeforeToday,
   isHoliday,
   mergeOpenDateConfigs,
@@ -23,7 +29,7 @@ const EMPTY_FORM: BookingFormValue = {
   name: "",
   date: "",
   slot: "",
-  duration: 30,
+  duration: 60,
   topics: [],
   note: "",
 };
@@ -32,23 +38,17 @@ function topicText(topics: Topic[]): string {
   return topics.length ? topics.join("、") : "未填";
 }
 
-/** 「16:00-16:30」→「1600」，月曆泡泡用（無冒號） */
-function slotStartCompactDigits(slotRange: string): string {
-  const start = slotRange.split("-")[0]?.trim() ?? "";
-  return start.replace(/:/g, "");
-}
-
 /** 老師一鍵帶入常見時段 */
 const TEACHER_SLOT_PRESETS: { label: string; start: string; end: string }[] = [
   { label: "16:00–17:00", start: "16:00", end: "17:00" },
   { label: "17:00–18:00", start: "17:00", end: "18:00" },
-  { label: "18:30–19:30", start: "18:30", end: "19:30" },
+  { label: "18:00–19:00", start: "18:00", end: "19:00" },
   { label: "19:00–20:00", start: "19:00", end: "20:00" },
 ];
 
 export default function App() {
   const todayStr = toDateString(new Date());
-  const timeChoices = useMemo(() => halfHourTimeOptions(), []);
+  const timeChoices = useMemo(() => hourlyTimeOptions(), []);
 
   const [form, setForm] = useState<BookingFormValue>(EMPTY_FORM);
   /** 老師在編輯模式新增的時段（寫入 localStorage，重整後仍保留） */
@@ -65,14 +65,36 @@ export default function App() {
   const [addSlotModal, setAddSlotModal] = useState<{ date: string } | null>(null);
   const [slotStart, setSlotStart] = useState("16:00");
   const [slotEnd, setSlotEnd] = useState("17:00");
+  /** 首次從 GAS／本機載入完成前，不把 teacherPatches 推上試算表，避免覆寫遠端 */
+  const [syncReady, setSyncReady] = useState(false);
 
   useEffect(() => {
-    fetchBookings().then(setBookings);
+    let cancelled = false;
+    (async () => {
+      const state = await syncAppStateFromServer();
+      if (cancelled) return;
+      if (state) {
+        setBookings(state.bookings);
+        setTeacherPatches(state.teacherPatches);
+      } else {
+        const list = await fetchBookings();
+        setBookings(list);
+      }
+      setSyncReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
     saveTeacherPatchesToStorage(teacherPatches);
-  }, [teacherPatches]);
+    if (!syncReady) return;
+    const t = window.setTimeout(() => {
+      void saveTeacherPatchesRemote(teacherPatches);
+    }, 500);
+    return () => clearTimeout(t);
+  }, [teacherPatches, syncReady]);
 
   const viewingMonthKey = `${monthCursor.getFullYear()}-${String(monthCursor.getMonth() + 1).padStart(2, "0")}`;
 
@@ -448,7 +470,7 @@ export default function App() {
                               .flatMap((slot) =>
                                 slot.bookings.map((b) => ({ booking: b, slotTime: slot.time }))
                               );
-                            const maxShow = 6;
+                            const maxShow = 2;
                             const shown = bubbleItems.slice(0, maxShow);
                             const more = bubbleItems.length - shown.length;
                             return (
@@ -457,15 +479,14 @@ export default function App() {
                                   <span
                                     key={b.id}
                                     className="booking-bubble"
-                                    title={`${slotTime} · ${b.name}`}
+                                    title={slotTime ? `${slotTime} · ${b.name}` : b.name}
                                   >
-                                    <span className="booking-bubble-time">{slotStartCompactDigits(slotTime)}</span>
                                     <span className="booking-bubble-name">{b.name}</span>
                                   </span>
                                 ))}
                                 {more > 0 ? (
-                                  <span className="booking-bubble booking-bubble-more" title={`另有 ${more} 筆`}>
-                                    +{more}
+                                  <span className="booking-bubble booking-bubble-more" title={`另有 ${more} 人`}>
+                                    ··· +{more}人
                                   </span>
                                 ) : null}
                               </div>

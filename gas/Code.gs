@@ -21,6 +21,9 @@ var SPREADSHEET_ID = "1MZdOExiJqcB9NT2auEtGQSgTKNJq-44-zk01yRcN61o";
 
 var SHEET_NAME = "預約紀錄";
 
+/** 老師額外開放時段 JSON，存在 A1（與前端 localStorage 對應） */
+var SHEET_TEACHER_PATCHES = "老師開放時段";
+
 var SHEET_HEADERS = [
   "timestamp",
   "姓名",
@@ -58,6 +61,20 @@ function doPost(e) {
     }
 
     var data = JSON.parse(e.postData.contents);
+
+    if (data && data.action === "getState") {
+      return jsonOut_({
+        ok: true,
+        bookings: listBookings_(),
+        teacherPatches: readTeacherPatchesJson_(),
+      });
+    }
+
+    if (data && data.action === "saveTeacherPatches") {
+      writeTeacherPatchesJson_(data.teacherPatches || []);
+      return jsonOut_({ ok: true });
+    }
+
     if (data && data.action === "delete") {
       deleteBookingRow_(data);
       return jsonOut_({ ok: true });
@@ -68,6 +85,70 @@ function doPost(e) {
   } catch (err) {
     return jsonOut_({ ok: false, error: String(err) });
   }
+}
+
+/**
+ * 讀取「預約紀錄」第 2 列起，組成前端 BookingRecord 陣列（預設耗時 30 分）
+ */
+function listBookings_() {
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAME);
+  if (!sheet || sheet.getLastRow() < 2) {
+    return [];
+  }
+  var lastRow = sheet.getLastRow();
+  var numCols = Math.max(sheet.getLastColumn(), 7);
+  var values = sheet.getRange(2, 1, lastRow, numCols).getValues();
+  var out = [];
+  for (var i = 0; i < values.length; i++) {
+    var row = values[i];
+    if (!row) continue;
+    var topicsStr = row[4] != null ? String(row[4]) : "";
+    var topicParts = topicsStr
+      ? topicsStr.split("、").map(function (t) {
+          return String(t).trim();
+        })
+      : [];
+    var idCell = row[6] != null ? String(row[6]).trim() : "";
+    out.push({
+      id: idCell || "sheet-row-" + (i + 2),
+      timestamp: row[0] != null ? String(row[0]) : "",
+      name: row[1] != null ? String(row[1]) : "",
+      date: row[2] != null ? String(row[2]) : "",
+      slot: row[3] != null ? String(row[3]) : "",
+      duration: 30,
+      topics: topicParts,
+      note: row[5] != null ? String(row[5]) : "",
+    });
+  }
+  return out;
+}
+
+function readTeacherPatchesJson_() {
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_TEACHER_PATCHES);
+  if (!sheet) {
+    return [];
+  }
+  var raw = sheet.getRange(1, 1).getValue();
+  if (raw == null || String(raw).trim() === "") {
+    return [];
+  }
+  try {
+    var parsed = JSON.parse(String(raw));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+function writeTeacherPatchesJson_(arr) {
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_TEACHER_PATCHES);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_TEACHER_PATCHES);
+  }
+  sheet.getRange(1, 1).setValue(JSON.stringify(arr));
 }
 
 function appendBookingRow_(data) {
