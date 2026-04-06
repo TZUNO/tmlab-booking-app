@@ -82,8 +82,14 @@ main.layout {
   gap: 16px;
   grid-template-columns: 1fr;
   width: 100%;
-  min-width: 0;
   box-sizing: border-box;
+}
+
+/* 僅包住「行事曆總覽」：讓 Grid 欄寬不被月曆 min-width 撐寬（頂部 hero 與填表區對齊），
+   月曆卡片與 .month-calendar-viewport 內部捲動維持原樣、不加額外 overflow */
+.calendar-panel-host {
+  width: 100%;
+  min-width: 0;
 }
 
 .panel {
@@ -92,7 +98,6 @@ main.layout {
   border-radius: 16px;
   padding: var(--card-padding-y) var(--card-padding-x);
   width: 100%;
-  min-width: 0;
   box-sizing: border-box;
 }
 
@@ -461,7 +466,7 @@ textarea {
   }
 
   .form-panel,
-  .calendar-panel {
+  .calendar-panel-host {
     min-width: 0;
   }
 

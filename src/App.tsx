@@ -367,6 +367,7 @@ export default function App() {
           </form>
         </section>
 
+        <div className="calendar-panel-host">
         <section className="panel calendar-panel">
           <h2>預約行事曆時段總覽</h2>
           <div className="month-head">
@@ -526,6 +527,7 @@ export default function App() {
             )}
           </div>
         </section>
+        </div>
       </main>
 
       {addSlotModal ? (
