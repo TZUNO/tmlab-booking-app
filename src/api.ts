@@ -1,30 +1,15 @@
 import { INITIAL_BOOKINGS, TOPIC_OPTIONS } from "./data";
 import type { BookingFormValue, BookingRecord, OpenDateConfig, SheetsDeletePayload, SheetsPayload, TimeSlotConfig, Topic } from "./types";
-import { loadBookingsFromStorage, saveBookingsToStorage, saveTeacherPatchesToStorage } from "./storage";
 
 const GAS_WEB_APP_URL = import.meta.env.VITE_GAS_WEB_APP_URL as string | undefined;
 
-const TOPIC_SET = new Set<string>(TOPIC_OPTIONS);
-const MOCK_BOOKING_IDS = new Set(INITIAL_BOOKINGS.map((b) => b.id));
+/** 有設定 Web App URL 時，預約與老師額外時段皆以 GAS／試算表為唯一真相（不靠 localStorage）。 */
+export const isGasConfigured = Boolean(GAS_WEB_APP_URL && String(GAS_WEB_APP_URL).trim() !== "");
 
-/**
- * 伺服器列舉與本機合併：同 id 以伺服器為準；僅在本機的 id（例如尚未寫入試算表成功）保留。
- * 若伺服器回傳空陣列但本機有資料，不覆寫本機（避免試算表讀取失敗時清空畫面）。
- */
-function mergeBookingsFromServer(server: BookingRecord[], local: BookingRecord[]): BookingRecord[] {
-  if (server.length === 0 && local.length > 0) {
-    return [...local];
-  }
-  const byId = new Map<string, BookingRecord>();
-  for (const b of server) {
-    if (b.id) byId.set(b.id, b);
-  }
-  for (const b of local) {
-    if (!b.id || byId.has(b.id)) continue;
-    if (server.length > 0 && MOCK_BOOKING_IDS.has(b.id)) continue;
-    byId.set(b.id, b);
-  }
-  return [...byId.values()].sort((a, b) => a.date.localeCompare(b.date) || a.slot.localeCompare(b.slot));
+const TOPIC_SET = new Set<string>(TOPIC_OPTIONS);
+
+function sortBookings(list: BookingRecord[]): BookingRecord[] {
+  return [...list].sort((a, b) => a.date.localeCompare(b.date) || a.slot.localeCompare(b.slot));
 }
 
 function parseTopics(raw: unknown): Topic[] {
@@ -41,7 +26,7 @@ function parseTopics(raw: unknown): Topic[] {
     .filter((t): t is Topic => TOPIC_SET.has(t));
 }
 
-/** getState 成功時：試算表上的老師額外時段 JSON 為唯一真相，勿與本機 merge（否則本機舊資料會蓋掉他裝置已刪除的時段並被自動存回試算表）。 */
+/** getState 成功時：試算表上的老師額外時段 JSON 為唯一真相。 */
 function cloneTeacherPatchesFromServer(patches: OpenDateConfig[]): OpenDateConfig[] {
   return patches.map((c) => ({
     date: c.date,
@@ -78,23 +63,18 @@ function normalizeBooking(raw: Record<string, unknown>, rowIndex: number): Booki
   };
 }
 
-/** 與頁面重整無關：從 localStorage 還原（同裝置離線備援） */
-let bookingStore: BookingRecord[] = loadBookingsFromStorage();
-
-function persistBookings(): void {
-  saveBookingsToStorage(bookingStore);
-}
+/** 執行中狀態：有 GAS 時僅由 syncAppStateFromServer 寫入；無 GAS 時為本機示範用記憶體 */
+let bookingStore: BookingRecord[] = isGasConfigured ? [] : [...INITIAL_BOOKINGS];
 
 /**
- * 從 GAS 讀取「預約紀錄」分頁 +「老師開放時段」分頁 JSON，寫回 localStorage。
- * 失敗時回傳 null，前端沿用本機資料。
+ * 從 GAS 讀取「預約紀錄」+「老師開放時段」JSON，覆寫記憶體中的 bookingStore（與回傳值一致）。
+ * 失敗時回傳 null，不修改 bookingStore。
  */
 export async function syncAppStateFromServer(): Promise<{
   bookings: BookingRecord[];
   teacherPatches: OpenDateConfig[];
 } | null> {
   if (!GAS_WEB_APP_URL) return null;
-  const localBookings = loadBookingsFromStorage();
   try {
     const res = await fetch(GAS_WEB_APP_URL, {
       method: "POST",
@@ -119,13 +99,8 @@ export async function syncAppStateFromServer(): Promise<{
     const serverBookings = json.bookings.map((row, i) => normalizeBooking(row as Record<string, unknown>, i));
     const serverPatches = Array.isArray(json.teacherPatches) ? (json.teacherPatches as OpenDateConfig[]) : [];
 
-    const mergedBookings = mergeBookingsFromServer(serverBookings, localBookings);
-    /** 與預約不同：patches 整份以伺服器為準（含空陣列＝老師已清空額外時段）。 */
+    bookingStore = sortBookings(serverBookings);
     const mergedPatches = cloneTeacherPatchesFromServer(serverPatches);
-
-    bookingStore = mergedBookings;
-    persistBookings();
-    saveTeacherPatchesToStorage(mergedPatches);
     return { bookings: bookingStore, teacherPatches: mergedPatches };
   } catch (e) {
     console.warn("[TMLab] syncAppStateFromServer failed", e);
@@ -149,7 +124,7 @@ export async function saveTeacherPatchesRemote(patches: OpenDateConfig[]): Promi
 }
 
 export async function fetchBookings(): Promise<BookingRecord[]> {
-  return [...bookingStore].sort((a, b) => a.date.localeCompare(b.date) || a.slot.localeCompare(b.slot));
+  return sortBookings(bookingStore);
 }
 
 export async function createBooking(input: BookingFormValue): Promise<BookingRecord> {
@@ -164,18 +139,36 @@ export async function createBooking(input: BookingFormValue): Promise<BookingRec
     note: input.note.trim(),
   };
 
-  bookingStore = [...bookingStore, record];
-  persistBookings();
+  if (!isGasConfigured) {
+    bookingStore = [...bookingStore, record];
+    return record;
+  }
+
   await logToGoogleSheets(record);
-  return record;
+  const synced = await syncAppStateFromServer();
+  if (synced) {
+    const found = bookingStore.find((b) => b.id === record.id);
+    if (found) return found;
+  }
+  /** 寫入後短暫延遲再拉一次（試算表 eventual consistency 極少見） */
+  await new Promise((r) => window.setTimeout(r, 350));
+  await syncAppStateFromServer();
+  const found = bookingStore.find((b) => b.id === record.id);
+  return found ?? record;
 }
 
 export async function deleteBooking(id: string): Promise<void> {
   const removed = bookingStore.find((item) => item.id === id);
-  bookingStore = bookingStore.filter((item) => item.id !== id);
-  persistBookings();
+  if (!isGasConfigured) {
+    bookingStore = bookingStore.filter((item) => item.id !== id);
+    return;
+  }
   if (removed) {
     await deleteFromGoogleSheets(removed);
+  }
+  const ok = await syncAppStateFromServer();
+  if (!ok && removed) {
+    bookingStore = sortBookings(bookingStore.filter((item) => item.id !== id));
   }
 }
 

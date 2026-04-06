@@ -21,7 +21,7 @@ var SPREADSHEET_ID = "1MZdOExiJqcB9NT2auEtGQSgTKNJq-44-zk01yRcN61o";
 
 var SHEET_NAME = "預約紀錄";
 
-/** 老師額外開放時段 JSON，存在 A1（與前端 localStorage 對應） */
+/** 老師額外開放時段 JSON，存在 A1（前端以 GAS getState／saveTeacherPatches 同步） */
 var SHEET_TEACHER_PATCHES = "老師開放時段";
 
 var SHEET_HEADERS = [

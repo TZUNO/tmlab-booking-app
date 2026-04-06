@@ -3,10 +3,11 @@ import {
   createBooking,
   deleteBooking,
   fetchBookings,
+  isGasConfigured,
   saveTeacherPatchesRemote,
   syncAppStateFromServer,
 } from "./api";
-import { DURATION_OPTIONS, STUDENT_GROUPS, TOPIC_OPTIONS } from "./data";
+import { DURATION_OPTIONS, INITIAL_BOOKINGS, STUDENT_GROUPS, TOPIC_OPTIONS } from "./data";
 import {
   addCalendarDays,
   buildOpenDateConfigsForInclusiveRange,
@@ -24,7 +25,6 @@ import {
   timeToMinutes,
   toDateString,
 } from "./date-utils";
-import { loadBookingsFromStorage, loadTeacherPatchesFromStorage, saveTeacherPatchesToStorage } from "./storage";
 import type { BookingFormValue, BookingRecord, CalendarDateView, OpenDateConfig, Topic } from "./types";
 import { WheelTimeSelect } from "./WheelTimeSelect";
 
@@ -62,11 +62,11 @@ export default function App() {
   );
 
   const [form, setForm] = useState<BookingFormValue>(EMPTY_FORM);
-  /** 老師在編輯模式新增的時段（寫入 localStorage，重整後仍保留） */
-  const [teacherPatches, setTeacherPatches] = useState<OpenDateConfig[]>(() =>
-    loadTeacherPatchesFromStorage()
+  /** 有 GAS 時由試算表同步；無 GAS 時僅記憶體示範 */
+  const [teacherPatches, setTeacherPatches] = useState<OpenDateConfig[]>(() => []);
+  const [bookings, setBookings] = useState<BookingRecord[]>(() =>
+    isGasConfigured ? [] : [...INITIAL_BOOKINGS]
   );
-  const [bookings, setBookings] = useState<BookingRecord[]>(() => loadBookingsFromStorage());
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [monthCursor, setMonthCursor] = useState(new Date());
@@ -131,7 +131,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    saveTeacherPatchesToStorage(teacherPatches);
     if (!syncReady) return;
     patchSaveGenerationRef.current += 1;
     const gen = patchSaveGenerationRef.current;
@@ -253,15 +252,7 @@ export default function App() {
     setSaving(true);
     setMessage("");
     await createBooking(form);
-    const state = await syncAppStateFromServer();
-    if (state) {
-      setBookings(state.bookings);
-      if (!teacherPatchesDirtyRef.current) {
-        setTeacherPatches(state.teacherPatches);
-      }
-    } else {
-      setBookings(await fetchBookings());
-    }
+    setBookings(await fetchBookings());
     setSelectedDate(form.date);
     const selected = new Date(`${form.date}T00:00:00`);
     setMonthCursor(new Date(selected.getFullYear(), selected.getMonth(), 1));
@@ -272,15 +263,7 @@ export default function App() {
 
   async function onDelete(id: string) {
     await deleteBooking(id);
-    const state = await syncAppStateFromServer();
-    if (state) {
-      setBookings(state.bookings);
-      if (!teacherPatchesDirtyRef.current) {
-        setTeacherPatches(state.teacherPatches);
-      }
-    } else {
-      setBookings(await fetchBookings());
-    }
+    setBookings(await fetchBookings());
   }
 
   /** 老師刪除「額外開放」的某一時段（僅 teacherPatches 內標為 extra 者） */
