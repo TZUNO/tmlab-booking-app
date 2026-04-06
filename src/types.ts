@@ -50,10 +50,22 @@ export interface CalendarDateView {
 }
 
 export interface SheetsPayload {
+  /** 與試算表「預約ID」欄一致，刪除時用此對應列 */
+  bookingId: string;
   timestamp: string;
   姓名: string;
   日期: string;
   時段: string;
   討論內容: string;
   備註: string;
+}
+
+/** POST body：action 為 delete 時由 GAS 刪除對應列 */
+export interface SheetsDeletePayload {
+  action: "delete";
+  bookingId: string;
+  timestamp: string;
+  姓名: string;
+  日期: string;
+  時段: string;
 }

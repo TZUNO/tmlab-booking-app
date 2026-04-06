@@ -16,6 +16,7 @@ import {
   timeToMinutes,
   toDateString,
 } from "./date-utils";
+import { loadTeacherPatchesFromStorage, saveTeacherPatchesToStorage } from "./storage";
 import type { BookingFormValue, BookingRecord, CalendarDateView, OpenDateConfig, Topic } from "./types";
 
 const EMPTY_FORM: BookingFormValue = {
@@ -50,8 +51,10 @@ export default function App() {
   const timeChoices = useMemo(() => halfHourTimeOptions(), []);
 
   const [form, setForm] = useState<BookingFormValue>(EMPTY_FORM);
-  /** 老師在編輯模式新增的時段（跨月保留，與當月基底合併） */
-  const [teacherPatches, setTeacherPatches] = useState<OpenDateConfig[]>([]);
+  /** 老師在編輯模式新增的時段（寫入 localStorage，重整後仍保留） */
+  const [teacherPatches, setTeacherPatches] = useState<OpenDateConfig[]>(() =>
+    loadTeacherPatchesFromStorage()
+  );
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -66,6 +69,10 @@ export default function App() {
   useEffect(() => {
     fetchBookings().then(setBookings);
   }, []);
+
+  useEffect(() => {
+    saveTeacherPatchesToStorage(teacherPatches);
+  }, [teacherPatches]);
 
   const viewingMonthKey = `${monthCursor.getFullYear()}-${String(monthCursor.getMonth() + 1).padStart(2, "0")}`;
 

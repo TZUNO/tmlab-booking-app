@@ -8,8 +8,9 @@
  * 建議：從試算表「擴充功能」→「Apps Script」建立腳本（綁定試算表），
  *       並將 SPREADSHEET_ID 設為 null，較不易權限錯誤。
  *
- * 前端 POST JSON 欄位：timestamp、姓名、日期、時段、討論內容、備註
- * （與 teacher-booking-app/src/api.ts 的 SheetsPayload 一致）
+ * 前端 POST JSON：
+ * - 新增：bookingId、timestamp、姓名、日期、時段、討論內容、備註
+ * - 刪除：{ "action":"delete", "bookingId", "timestamp", "姓名", "日期", "時段" }
  */
 
 /**
@@ -27,6 +28,7 @@ var SHEET_HEADERS = [
   "時段",
   "討論內容",
   "備註",
+  "預約ID",
 ];
 
 function getSpreadsheet_() {
@@ -56,6 +58,10 @@ function doPost(e) {
     }
 
     var data = JSON.parse(e.postData.contents);
+    if (data && data.action === "delete") {
+      deleteBookingRow_(data);
+      return jsonOut_({ ok: true });
+    }
     appendBookingRow_(data);
 
     return jsonOut_({ ok: true });
@@ -70,6 +76,8 @@ function appendBookingRow_(data) {
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_NAME);
     sheet.appendRow(SHEET_HEADERS);
+  } else {
+    ensureBookingIdHeader_(sheet);
   }
 
   var ts = data.timestamp || new Date().toISOString();
@@ -78,8 +86,74 @@ function appendBookingRow_(data) {
   var slot = data["時段"] || "";
   var topics = data["討論內容"] || "";
   var note = data["備註"] || "";
+  var bookingId = data.bookingId != null ? String(data.bookingId) : "";
 
-  sheet.appendRow([ts, name, date, slot, topics, note]);
+  sheet.appendRow([ts, name, date, slot, topics, note, bookingId]);
+}
+
+/**
+ * 舊表只有 6 欄時，補上 G1「預約ID」標題（不動既有資料列）。
+ */
+function ensureBookingIdHeader_(sheet) {
+  var lastCol = sheet.getLastColumn();
+  if (lastCol < 7) {
+    sheet.getRange(1, 7).setValue("預約ID");
+  } else if (String(sheet.getRange(1, 7).getValue() || "").trim() === "") {
+    sheet.getRange(1, 7).setValue("預約ID");
+  }
+}
+
+/**
+ * 優先以 G 欄預約ID 對齊；舊列無 ID 時以 timestamp+姓名+日期+時段 比對（字串 trim）。
+ * 由最後一列往上刪，只刪第一筆命中。
+ */
+function deleteBookingRow_(data) {
+  var bookingId = data.bookingId != null ? String(data.bookingId).trim() : "";
+  var ts = data.timestamp != null ? String(data.timestamp).trim() : "";
+  var name = data["姓名"] != null ? String(data["姓名"]).trim() : "";
+  var date = data["日期"] != null ? String(data["日期"]).trim() : "";
+  var slot = data["時段"] != null ? String(data["時段"]).trim() : "";
+
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAME);
+  if (!sheet) {
+    return;
+  }
+
+  var numRows = sheet.getLastRow();
+  if (numRows < 2) {
+    return;
+  }
+
+  var numCols = Math.max(sheet.getLastColumn(), 7);
+  var values = sheet.getRange(1, 1, numRows, numCols).getValues();
+
+  for (var r = numRows - 1; r >= 1; r--) {
+    var row = values[r];
+    if (!row) continue;
+    var cellId = row[6] != null ? String(row[6]).trim() : "";
+    if (bookingId && cellId && cellId === bookingId) {
+      sheet.deleteRow(r + 1);
+      return;
+    }
+  }
+
+  if (!ts && !name && !date && !slot) {
+    return;
+  }
+
+  for (var r2 = numRows - 1; r2 >= 1; r2--) {
+    var row2 = values[r2];
+    if (!row2) continue;
+    var rTs = row2[0] != null ? String(row2[0]).trim() : "";
+    var rName = row2[1] != null ? String(row2[1]).trim() : "";
+    var rDate = row2[2] != null ? String(row2[2]).trim() : "";
+    var rSlot = row2[3] != null ? String(row2[3]).trim() : "";
+    if (rTs === ts && rName === name && rDate === date && rSlot === slot) {
+      sheet.deleteRow(r2 + 1);
+      return;
+    }
+  }
 }
 
 function jsonOut_(obj) {

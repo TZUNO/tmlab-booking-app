@@ -2,6 +2,9 @@
   font-family: "Noto Sans TC", system-ui, -apple-system, sans-serif;
   color: #1f2937;
   background: #f4f6f8;
+  /* 與 .panel 一致，讓頂部 hero 與下方卡片邊框／內文左緣對齊 */
+  --card-padding-x: 16px;
+  --card-padding-y: 16px;
 }
 
 * {
@@ -12,18 +15,29 @@ body {
   margin: 0;
 }
 
+main.layout {
+  margin: 0;
+  width: 100%;
+}
+
 .page {
   max-width: 1240px;
   margin: 0 auto;
-  padding: 20px 14px 40px;
+  padding-top: 20px;
+  padding-bottom: max(40px, env(safe-area-inset-bottom, 0px));
+  padding-left: max(14px, env(safe-area-inset-left, 0px));
+  padding-right: max(14px, env(safe-area-inset-right, 0px));
+  box-sizing: border-box;
 }
 
 .hero {
   background: #ffffff;
   border: 1px solid #e5e7eb;
   border-radius: 16px;
-  padding: 18px 20px;
+  padding: var(--card-padding-y) var(--card-padding-x);
   margin-bottom: 16px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .hero h1 {
@@ -67,13 +81,17 @@ body {
   display: grid;
   gap: 16px;
   grid-template-columns: 1fr;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .panel {
   background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 16px;
-  padding: 16px;
+  padding: var(--card-padding-y) var(--card-padding-x);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .panel h2 {
@@ -438,6 +456,11 @@ textarea {
   .layout {
     grid-template-columns: 360px 1fr;
     align-items: start;
+  }
+
+  .form-panel,
+  .calendar-panel {
+    min-width: 0;
   }
 
   .form-panel {
