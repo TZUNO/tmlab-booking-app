@@ -42,21 +42,31 @@ function parseTopics(raw: unknown): Topic[] {
   const s = String(raw ?? "");
   if (!s.trim()) return [];
   return s
-    .split("、")
+    .split(/[、,，]/)
     .map((t) => t.trim())
     .filter((t): t is Topic => TOPIC_SET.has(t));
 }
 
-function normalizeBooking(raw: Record<string, unknown>): BookingRecord {
+function normalizeBooking(raw: Record<string, unknown>, rowIndex: number): BookingRecord {
+  const name = String(raw.name ?? raw["姓名"] ?? "").trim();
+  const date = String(raw.date ?? raw["日期"] ?? "").trim();
+  const slot = String(raw.slot ?? raw["時段"] ?? "").trim();
+  const timestamp = String(raw.timestamp ?? "").trim();
+  const note = String(raw.note ?? raw["備註"] ?? "").trim();
+  let id = String(raw.id ?? raw.bookingId ?? "").trim();
+  if (!id) {
+    id = `sheet-${rowIndex}-${date}-${slot}-${name}`;
+  }
+  const topicsRaw = raw.topics ?? raw["討論內容"];
   return {
-    id: String(raw.id ?? ""),
-    timestamp: String(raw.timestamp ?? ""),
-    name: String(raw.name ?? ""),
-    date: String(raw.date ?? ""),
-    slot: String(raw.slot ?? ""),
+    id,
+    timestamp,
+    name,
+    date,
+    slot,
     duration: typeof raw.duration === "number" && Number.isFinite(raw.duration) ? raw.duration : 30,
-    topics: parseTopics(raw.topics),
-    note: String(raw.note ?? ""),
+    topics: parseTopics(topicsRaw),
+    note,
   };
 }
 
@@ -81,6 +91,7 @@ export async function syncAppStateFromServer(): Promise<{
   try {
     const res = await fetch(GAS_WEB_APP_URL, {
       method: "POST",
+      cache: "no-store",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({ action: "getState" }),
     });
@@ -98,7 +109,7 @@ export async function syncAppStateFromServer(): Promise<{
     }
     if (!json.ok || !Array.isArray(json.bookings)) return null;
 
-    const serverBookings = json.bookings.map((row) => normalizeBooking(row as Record<string, unknown>));
+    const serverBookings = json.bookings.map((row, i) => normalizeBooking(row as Record<string, unknown>, i));
     const serverPatches = Array.isArray(json.teacherPatches) ? (json.teacherPatches as OpenDateConfig[]) : [];
 
     const mergedBookings = mergeBookingsFromServer(serverBookings, localBookings);
@@ -120,6 +131,7 @@ export async function saveTeacherPatchesRemote(patches: OpenDateConfig[]): Promi
   try {
     await fetch(GAS_WEB_APP_URL, {
       method: "POST",
+      cache: "no-store",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({ action: "saveTeacherPatches", teacherPatches: patches }),
     });
@@ -178,6 +190,7 @@ export async function logToGoogleSheets(record: BookingRecord): Promise<void> {
   try {
     await fetch(GAS_WEB_APP_URL, {
       method: "POST",
+      cache: "no-store",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify(payload),
     });
@@ -204,6 +217,7 @@ async function deleteFromGoogleSheets(record: BookingRecord): Promise<void> {
   try {
     await fetch(GAS_WEB_APP_URL, {
       method: "POST",
+      cache: "no-store",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify(payload),
     });

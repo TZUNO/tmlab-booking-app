@@ -58,6 +58,14 @@ function cellToIsoOrString_(v) {
   return v != null ? String(v) : "";
 }
 
+/** C 欄若為試算表 Date，轉成 yyyy-MM-dd 供前端比對 */
+function cellDateYmd_(v) {
+  if (v instanceof Date) {
+    return Utilities.formatDate(v, Session.getScriptTimeZone(), "yyyy-MM-dd");
+  }
+  return v != null ? String(v).trim() : "";
+}
+
 /**
  * 瀏覽器直接開 Web App 網址 = GET，必須有 doGet，否則會報錯。
  */
@@ -131,7 +139,7 @@ function listBookings_() {
       id: idCell || "sheet-row-" + (i + 2),
       timestamp: cellToIsoOrString_(row[0]),
       name: row[1] != null ? String(row[1]) : "",
-      date: row[2] != null ? String(row[2]) : "",
+      date: cellDateYmd_(row[2]),
       slot: row[3] != null ? String(row[3]) : "",
       duration: 30,
       topics: topicParts,
@@ -143,7 +151,7 @@ function listBookings_() {
 
 function readTeacherPatchesJson_() {
   var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_TEACHER_PATCHES);
+  var sheet = getSheetByNameTrim_(ss, SHEET_TEACHER_PATCHES);
   if (!sheet) {
     return [];
   }
@@ -161,7 +169,7 @@ function readTeacherPatchesJson_() {
 
 function writeTeacherPatchesJson_(arr) {
   var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_TEACHER_PATCHES);
+  var sheet = getSheetByNameTrim_(ss, SHEET_TEACHER_PATCHES);
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_TEACHER_PATCHES);
   }

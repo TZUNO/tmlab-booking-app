@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createBooking,
   deleteBooking,
@@ -95,6 +95,31 @@ export default function App() {
     })();
     return () => {
       cancelled = true;
+    };
+  }, []);
+
+  /** 切回分頁或網路恢復時再拉試算表，讓跨裝置／多人看到最新預約 */
+  const lastBackgroundSyncRef = useRef(0);
+  useEffect(() => {
+    const run = () => {
+      const now = Date.now();
+      if (now - lastBackgroundSyncRef.current < 2500) return;
+      lastBackgroundSyncRef.current = now;
+      void syncAppStateFromServer().then((state) => {
+        if (state) {
+          setBookings(state.bookings);
+          setTeacherPatches(state.teacherPatches);
+        }
+      });
+    };
+    const onVis = () => {
+      if (document.visibilityState === "visible") run();
+    };
+    window.addEventListener("online", run);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("online", run);
+      document.removeEventListener("visibilitychange", onVis);
     };
   }, []);
 
@@ -293,7 +318,7 @@ export default function App() {
           研究室・表單日期僅列出「今日起」30 天內可預約日（可跨月）
         </p>
         <p>
-          週一與週四以外時間請私訊老師確認是否額外開放，碩一以上要提報（口考）的同學，請自行注意討論的次數與研究進度，
+          週一與週四以外時間請私訊老師確認是否額外開放，碩一以上要提報（口考）的同學，請自行注意討論的次數與研究進度
         </p>
       </header>
 
