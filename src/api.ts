@@ -1,12 +1,6 @@
 import { INITIAL_BOOKINGS, TOPIC_OPTIONS } from "./data";
-import { mergeOpenDateConfigs } from "./date-utils";
-import type { BookingFormValue, BookingRecord, OpenDateConfig, SheetsDeletePayload, SheetsPayload, Topic } from "./types";
-import {
-  loadBookingsFromStorage,
-  loadTeacherPatchesFromStorage,
-  saveBookingsToStorage,
-  saveTeacherPatchesToStorage,
-} from "./storage";
+import type { BookingFormValue, BookingRecord, OpenDateConfig, SheetsDeletePayload, SheetsPayload, TimeSlotConfig, Topic } from "./types";
+import { loadBookingsFromStorage, saveBookingsToStorage, saveTeacherPatchesToStorage } from "./storage";
 
 const GAS_WEB_APP_URL = import.meta.env.VITE_GAS_WEB_APP_URL as string | undefined;
 
@@ -45,6 +39,20 @@ function parseTopics(raw: unknown): Topic[] {
     .split(/[、,，]/)
     .map((t) => t.trim())
     .filter((t): t is Topic => TOPIC_SET.has(t));
+}
+
+/** getState 成功時：試算表上的老師額外時段 JSON 為唯一真相，勿與本機 merge（否則本機舊資料會蓋掉他裝置已刪除的時段並被自動存回試算表）。 */
+function cloneTeacherPatchesFromServer(patches: OpenDateConfig[]): OpenDateConfig[] {
+  return patches.map((c) => ({
+    date: c.date,
+    isExtraOpen: Boolean(c.isExtraOpen),
+    slots: c.slots.map(
+      (s): TimeSlotConfig => ({
+        time: s.time,
+        source: s.source === "extra" ? "extra" : "fixed",
+      })
+    ),
+  }));
 }
 
 function normalizeBooking(raw: Record<string, unknown>, rowIndex: number): BookingRecord {
@@ -87,7 +95,6 @@ export async function syncAppStateFromServer(): Promise<{
 } | null> {
   if (!GAS_WEB_APP_URL) return null;
   const localBookings = loadBookingsFromStorage();
-  const localPatches = loadTeacherPatchesFromStorage();
   try {
     const res = await fetch(GAS_WEB_APP_URL, {
       method: "POST",
@@ -113,7 +120,8 @@ export async function syncAppStateFromServer(): Promise<{
     const serverPatches = Array.isArray(json.teacherPatches) ? (json.teacherPatches as OpenDateConfig[]) : [];
 
     const mergedBookings = mergeBookingsFromServer(serverBookings, localBookings);
-    const mergedPatches = mergeOpenDateConfigs(serverPatches, localPatches);
+    /** 與預約不同：patches 整份以伺服器為準（含空陣列＝老師已清空額外時段）。 */
+    const mergedPatches = cloneTeacherPatchesFromServer(serverPatches);
 
     bookingStore = mergedBookings;
     persistBookings();

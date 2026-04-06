@@ -461,10 +461,38 @@ textarea {
   padding: 8px 10px;
 }
 
+.slot-time-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
 .slot-time {
   font-weight: 700;
-  margin-bottom: 6px;
+  margin-bottom: 0;
   font-size: 0.9rem;
+}
+
+.remove-extra-slot-btn {
+  border: 1px solid #fca5a5;
+  background: #fff1f2;
+  color: #b91c1c;
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  font: inherit;
+  white-space: nowrap;
+}
+
+.form-hint-extra {
+  margin: -8px 0 10px;
+  font-size: 0.8rem;
+  color: #b45309;
+  line-height: 1.45;
 }
 
 .empty {

@@ -288,7 +288,11 @@ export function buildCalendarWithHolidays(openDateConfigs: OpenDateConfig[]): Ca
       isHoliday: holiday.isHoliday,
       holidayName: holiday.name,
       isExtraOpen: open?.isExtraOpen ?? false,
-      slots: (open?.slots ?? []).map((slot) => ({ time: slot.time, bookings: [] })),
+      slots: (open?.slots ?? []).map((slot) => ({
+        time: slot.time,
+        source: slot.source,
+        bookings: [],
+      })),
     });
   }
 

@@ -253,7 +253,7 @@ function deleteBookingRow_(data) {
     if (!row2) continue;
     var rTs = row2[0] != null ? String(row2[0]).trim() : "";
     var rName = row2[1] != null ? String(row2[1]).trim() : "";
-    var rDate = row2[2] != null ? String(row2[2]).trim() : "";
+    var rDate = cellDateYmd_(row2[2]);
     var rSlot = row2[3] != null ? String(row2[3]).trim() : "";
     if (rTs === ts && rName === name && rDate === date && rSlot === slot) {
       sheet.deleteRow(r2 + 1);

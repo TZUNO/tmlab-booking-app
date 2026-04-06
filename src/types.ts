@@ -38,6 +38,8 @@ export interface BookingFormValue {
 
 export interface CalendarSlotView {
   time: string;
+  /** 來自週一／週四固定或老師額外開放 */
+  source?: "fixed" | "extra";
   bookings: BookingRecord[];
 }
 

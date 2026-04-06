@@ -78,6 +78,10 @@ export default function App() {
   const [slotEnd, setSlotEnd] = useState("17:00");
   /** 首次從 GAS／本機載入完成前，不把 teacherPatches 推上試算表，避免覆寫遠端 */
   const [syncReady, setSyncReady] = useState(false);
+  /** 本機正在編輯額外時段時，背景同步勿覆寫 teacherPatches（避免未存回的變更被舊的試算表狀態蓋掉） */
+  const teacherPatchesDirtyRef = useRef(false);
+  /** 與 debounce 搭配：僅「對應到目前這版 patches 的那次存檔」完成時才清除 dirty */
+  const patchSaveGenerationRef = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -106,8 +110,9 @@ export default function App() {
       if (now - lastBackgroundSyncRef.current < 2500) return;
       lastBackgroundSyncRef.current = now;
       void syncAppStateFromServer().then((state) => {
-        if (state) {
-          setBookings(state.bookings);
+        if (!state) return;
+        setBookings(state.bookings);
+        if (!teacherPatchesDirtyRef.current) {
           setTeacherPatches(state.teacherPatches);
         }
       });
@@ -116,9 +121,11 @@ export default function App() {
       if (document.visibilityState === "visible") run();
     };
     window.addEventListener("online", run);
+    window.addEventListener("focus", run);
     document.addEventListener("visibilitychange", onVis);
     return () => {
       window.removeEventListener("online", run);
+      window.removeEventListener("focus", run);
       document.removeEventListener("visibilitychange", onVis);
     };
   }, []);
@@ -126,8 +133,14 @@ export default function App() {
   useEffect(() => {
     saveTeacherPatchesToStorage(teacherPatches);
     if (!syncReady) return;
+    patchSaveGenerationRef.current += 1;
+    const gen = patchSaveGenerationRef.current;
     const t = window.setTimeout(() => {
-      void saveTeacherPatchesRemote(teacherPatches);
+      void saveTeacherPatchesRemote(teacherPatches).finally(() => {
+        if (patchSaveGenerationRef.current === gen) {
+          teacherPatchesDirtyRef.current = false;
+        }
+      });
     }, 500);
     return () => clearTimeout(t);
   }, [teacherPatches, syncReady]);
@@ -178,6 +191,12 @@ export default function App() {
     [form.date, openDates]
   );
 
+  /** 目前選取的時段是否為老師「額外開放」（長區間時需在備註填實際開始時間） */
+  const selectedSlotSource = useMemo(() => {
+    if (!form.date || !form.slot) return undefined;
+    return openDates.find((d) => d.date === form.date)?.slots.find((s) => s.time === form.slot)?.source;
+  }, [form.date, form.slot, openDates]);
+
   const dateMap = useMemo(() => new Map(openDates.map((item) => [item.date, item])), [openDates]);
 
   const monthDates = useMemo(() => {
@@ -202,6 +221,7 @@ export default function App() {
       const open = dateMap.get(item.date);
       const slots = (open?.slots ?? []).map((slot) => ({
         time: slot.time,
+        source: slot.source,
         bookings: bookings.filter((b) => b.date === item.date && b.slot === slot.time),
       }));
       rows.push({
@@ -226,11 +246,22 @@ export default function App() {
       setMessage("請完整填寫姓名、日期、時段與討論內容。");
       return;
     }
+    if (selectedSlotSource === "extra" && !form.note.trim()) {
+      setMessage("此時段為額外開放，請於「備註」填寫實際到場／開始討論的時間（例如 15:30）。");
+      return;
+    }
     setSaving(true);
     setMessage("");
     await createBooking(form);
-    const updated = await fetchBookings();
-    setBookings(updated);
+    const state = await syncAppStateFromServer();
+    if (state) {
+      setBookings(state.bookings);
+      if (!teacherPatchesDirtyRef.current) {
+        setTeacherPatches(state.teacherPatches);
+      }
+    } else {
+      setBookings(await fetchBookings());
+    }
     setSelectedDate(form.date);
     const selected = new Date(`${form.date}T00:00:00`);
     setMonthCursor(new Date(selected.getFullYear(), selected.getMonth(), 1));
@@ -241,11 +272,55 @@ export default function App() {
 
   async function onDelete(id: string) {
     await deleteBooking(id);
-    const updated = await fetchBookings();
-    setBookings(updated);
+    const state = await syncAppStateFromServer();
+    if (state) {
+      setBookings(state.bookings);
+      if (!teacherPatchesDirtyRef.current) {
+        setTeacherPatches(state.teacherPatches);
+      }
+    } else {
+      setBookings(await fetchBookings());
+    }
+  }
+
+  /** 老師刪除「額外開放」的某一時段（僅 teacherPatches 內標為 extra 者） */
+  function removeTeacherExtraSlot(date: string, slotTime: string) {
+    if (!syncReady) {
+      setMessage("與試算表同步中，請稍候再試。");
+      return;
+    }
+    const cnt = bookings.filter((b) => b.date === date && b.slot === slotTime).length;
+    if (cnt > 0) {
+      const ok = window.confirm(
+        `此時段已有 ${cnt} 筆預約。刪除後時段將關閉，但既有預約紀錄仍保留；請視需要請同學改期或於後台刪除預約。確定刪除此額外時段？`
+      );
+      if (!ok) return;
+    } else if (!window.confirm(`確定刪除 ${formatDateLabel(date)} 的額外時段 ${slotTime}？`)) {
+      return;
+    }
+    teacherPatchesDirtyRef.current = true;
+    setTeacherPatches((prev) => {
+      const found = prev.find((item) => item.date === date);
+      if (!found) return prev;
+      const filtered = found.slots.filter((s) => !(s.source === "extra" && s.time === slotTime));
+      if (filtered.length === 0) {
+        return prev.filter((item) => item.date !== date);
+      }
+      return prev.map((item) =>
+        item.date === date
+          ? {
+              ...item,
+              slots: filtered,
+              isExtraOpen: filtered.some((s) => s.source === "extra"),
+            }
+          : item
+      );
+    });
+    setMessage(`已移除 ${formatDateLabel(date)} 的額外時段：${slotTime}`);
   }
 
   function mergeExtraSlots(date: string, slotTimes: string[]) {
+    teacherPatchesDirtyRef.current = true;
     const newSlots = slotTimes.map((time) => ({ time, source: "extra" as const }));
     setTeacherPatches((prev) => {
       const found = prev.find((item) => item.date === date);
@@ -269,6 +344,10 @@ export default function App() {
   }
 
   function openAddSlotModal(date: string) {
+    if (!syncReady) {
+      setMessage("與試算表同步中，請稍候再新增時段。");
+      return;
+    }
     const holiday = isHoliday(date);
     if (holiday.isHoliday) {
       setMessage("國定假日不可新增開放時段。");
@@ -382,6 +461,11 @@ export default function App() {
                 })}
               </select>
             </label>
+            {selectedSlotSource === "extra" ? (
+              <p className="form-hint-extra" role="note">
+                此時段為老師額外開放，上方為可預約時間範圍；請於下方「備註」填寫實際到場／開始討論的時間（例如 15:30）。
+              </p>
+            ) : null}
 
             <label>
               預計耗時
@@ -426,7 +510,11 @@ export default function App() {
               <textarea
                 value={form.note}
                 onChange={(e) => setForm((v) => ({ ...v, note: e.target.value }))}
-                placeholder="可補充想討論的內容。預設地點為 3F 研究室。"
+                placeholder={
+                  selectedSlotSource === "extra"
+                    ? "【額外開放必填】請填寫實際到場／開始時間（例如 15:30）。可補充討論內容。預設地點 3F 研究室。"
+                    : "可補充想討論的內容。預設地點為 3F 研究室。"
+                }
                 rows={4}
               />
             </label>
@@ -577,7 +665,18 @@ export default function App() {
                 <ul className="slots">
                   {selectedDateView.slots.map((slot) => (
                     <li key={`${selectedDateView.date}-${slot.time}`} className="slot">
-                      <div className="slot-time">{slot.time}</div>
+                      <div className="slot-time-row">
+                        <div className="slot-time">{slot.time}</div>
+                        {teacherEditMode && slot.source === "extra" ? (
+                          <button
+                            type="button"
+                            className="remove-extra-slot-btn"
+                            onClick={() => removeTeacherExtraSlot(selectedDateView.date, slot.time)}
+                          >
+                            刪除此額外時段
+                          </button>
+                        ) : null}
+                      </div>
                       {slot.bookings.length === 0 ? (
                         <p className="empty">目前空白時段</p>
                       ) : (
