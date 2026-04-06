@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Build
+dist/
+
+# Local env (do not commit secrets)
+.env
+.env.local
+.env.*.local
+
+# Logs / OS
+*.log
+.DS_Store
+
+# Local tooling (may contain nested git metadata)
+.codex/

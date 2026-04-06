@@ -1,0 +1,59 @@
+export type Topic = "計劃執行" | "生涯" | "純聊天" | "碩博論" | "研討會或期刊";
+
+export interface StudentGroup {
+  label: string;
+  students: string[];
+}
+
+export interface TimeSlotConfig {
+  time: string;
+  source: "fixed" | "extra";
+}
+
+export interface OpenDateConfig {
+  date: string; // YYYY-MM-DD
+  slots: TimeSlotConfig[];
+  isExtraOpen: boolean;
+}
+
+export interface BookingRecord {
+  id: string;
+  timestamp: string;
+  name: string;
+  date: string;
+  slot: string;
+  duration: number;
+  topics: Topic[];
+  note: string;
+}
+
+export interface BookingFormValue {
+  name: string;
+  date: string;
+  slot: string;
+  duration: number;
+  topics: Topic[];
+  note: string;
+}
+
+export interface CalendarSlotView {
+  time: string;
+  bookings: BookingRecord[];
+}
+
+export interface CalendarDateView {
+  date: string;
+  isHoliday: boolean;
+  holidayName?: string;
+  isExtraOpen: boolean;
+  slots: CalendarSlotView[];
+}
+
+export interface SheetsPayload {
+  timestamp: string;
+  姓名: string;
+  日期: string;
+  時段: string;
+  討論內容: string;
+  備註: string;
+}
