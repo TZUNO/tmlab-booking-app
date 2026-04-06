@@ -60,6 +60,8 @@ export interface SheetsPayload {
   時段: string;
   討論內容: string;
   備註: string;
+  /** 分鐘數，對應試算表 H 欄「預計耗時(分鐘)」 */
+  durationMinutes: number;
 }
 
 /** POST body：action 為 delete 時由 GAS 刪除對應列 */

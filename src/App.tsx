@@ -624,7 +624,7 @@ export default function App() {
                               .flatMap((slot) =>
                                 slot.bookings.map((b) => ({ booking: b, slotTime: slot.time }))
                               );
-                            const maxShow = 2;
+                            const maxShow = 4;
                             const shown = bubbleItems.slice(0, maxShow);
                             const more = bubbleItems.length - shown.length;
                             return (
@@ -633,14 +633,19 @@ export default function App() {
                                   <span
                                     key={b.id}
                                     className="booking-bubble"
-                                    title={slotTime ? `${slotTime} · ${b.name}` : b.name}
+                                    title={
+                                      slotTime
+                                        ? `${slotTime} · ${b.name} · ${b.duration} 分鐘`
+                                        : `${b.name} · ${b.duration} 分鐘`
+                                    }
                                   >
                                     <span className="booking-bubble-name">{b.name}</span>
+                                    <span className="booking-bubble-meta">{b.duration} 分鐘</span>
                                   </span>
                                 ))}
                                 {more > 0 ? (
                                   <span className="booking-bubble booking-bubble-more" title={`另有 ${more} 人`}>
-                                    ··· +{more}人
+                                    +{more} 人
                                   </span>
                                 ) : null}
                               </div>

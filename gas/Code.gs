@@ -9,7 +9,7 @@
  *       並將 SPREADSHEET_ID 設為 null，較不易權限錯誤。
  *
  * 前端 POST JSON：
- * - 新增：bookingId、timestamp、姓名、日期、時段、討論內容、備註
+ * - 新增：bookingId、timestamp、姓名、日期、時段、討論內容、備註、durationMinutes（分鐘，寫入 H 欄）
  * - 刪除：{ "action":"delete", "bookingId", "timestamp", "姓名", "日期", "時段" }
  */
 
@@ -32,6 +32,7 @@ var SHEET_HEADERS = [
   "討論內容",
   "備註",
   "預約ID",
+  "預計耗時(分鐘)",
 ];
 
 function getSpreadsheet_() {
@@ -113,7 +114,7 @@ function doPost(e) {
 }
 
 /**
- * 讀取「預約紀錄」第 2 列起，組成前端 BookingRecord 陣列（預設耗時 30 分）
+ * 讀取「預約紀錄」第 2 列起，組成前端 BookingRecord 陣列（H 欄為預計耗時分鐘，缺則 30）
  */
 function listBookings_() {
   var ss = getSpreadsheet_();
@@ -122,7 +123,7 @@ function listBookings_() {
     return [];
   }
   var lastRow = sheet.getLastRow();
-  var numCols = Math.max(sheet.getLastColumn(), 7);
+  var numCols = Math.max(sheet.getLastColumn(), 8);
   var values = sheet.getRange(2, 1, lastRow, numCols).getValues();
   var out = [];
   for (var i = 0; i < values.length; i++) {
@@ -135,13 +136,15 @@ function listBookings_() {
         })
       : [];
     var idCell = row[6] != null ? String(row[6]).trim() : "";
+    var durParsed = parseInt(String(row[7] != null ? row[7] : ""), 10);
+    var duration = durParsed > 0 && isFinite(durParsed) ? durParsed : 30;
     out.push({
       id: idCell || "sheet-row-" + (i + 2),
       timestamp: cellToIsoOrString_(row[0]),
       name: row[1] != null ? String(row[1]) : "",
       date: cellDateYmd_(row[2]),
       slot: row[3] != null ? String(row[3]) : "",
-      duration: 30,
+      duration: duration,
       topics: topicParts,
       note: row[5] != null ? String(row[5]) : "",
     });
@@ -183,7 +186,7 @@ function appendBookingRow_(data) {
     sheet = ss.insertSheet(SHEET_NAME);
     sheet.appendRow(SHEET_HEADERS);
   } else {
-    ensureBookingIdHeader_(sheet);
+    ensureBookingSheetHeaders_(sheet);
   }
 
   var ts = data.timestamp || new Date().toISOString();
@@ -193,19 +196,29 @@ function appendBookingRow_(data) {
   var topics = data["討論內容"] || "";
   var note = data["備註"] || "";
   var bookingId = data.bookingId != null ? String(data.bookingId) : "";
+  var durParsed = parseInt(
+    String(data.durationMinutes != null ? data.durationMinutes : data["預計耗時"] || ""),
+    10
+  );
+  var durationMin = durParsed > 0 && isFinite(durParsed) ? durParsed : 30;
 
-  sheet.appendRow([ts, name, date, slot, topics, note, bookingId]);
+  sheet.appendRow([ts, name, date, slot, topics, note, bookingId, durationMin]);
 }
 
 /**
- * 舊表只有 6 欄時，補上 G1「預約ID」標題（不動既有資料列）。
+ * 舊表欄位不足時，補上 G1「預約ID」、H1「預計耗時(分鐘)」（不動既有資料列）。
  */
-function ensureBookingIdHeader_(sheet) {
+function ensureBookingSheetHeaders_(sheet) {
   var lastCol = sheet.getLastColumn();
   if (lastCol < 7) {
     sheet.getRange(1, 7).setValue("預約ID");
   } else if (String(sheet.getRange(1, 7).getValue() || "").trim() === "") {
     sheet.getRange(1, 7).setValue("預約ID");
+  }
+  if (lastCol < 8) {
+    sheet.getRange(1, 8).setValue("預計耗時(分鐘)");
+  } else if (String(sheet.getRange(1, 8).getValue() || "").trim() === "") {
+    sheet.getRange(1, 8).setValue("預計耗時(分鐘)");
   }
 }
 
@@ -232,7 +245,7 @@ function deleteBookingRow_(data) {
     return;
   }
 
-  var numCols = Math.max(sheet.getLastColumn(), 7);
+  var numCols = Math.max(sheet.getLastColumn(), 8);
   var values = sheet.getRange(1, 1, numRows, numCols).getValues();
 
   for (var r = numRows - 1; r >= 1; r--) {

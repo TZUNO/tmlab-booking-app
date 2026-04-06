@@ -51,13 +51,21 @@ function normalizeBooking(raw: Record<string, unknown>, rowIndex: number): Booki
     id = `sheet-${rowIndex}-${date}-${slot}-${name}`;
   }
   const topicsRaw = raw.topics ?? raw["討論內容"];
+  const durRaw = raw.duration ?? raw["預計耗時"] ?? raw["預計耗時(分鐘)"];
+  let duration = 30;
+  if (typeof durRaw === "number" && Number.isFinite(durRaw) && durRaw > 0) {
+    duration = Math.round(durRaw);
+  } else if (typeof durRaw === "string" && durRaw.trim()) {
+    const n = parseInt(durRaw, 10);
+    if (Number.isFinite(n) && n > 0) duration = n;
+  }
   return {
     id,
     timestamp,
     name,
     date,
     slot,
-    duration: typeof raw.duration === "number" && Number.isFinite(raw.duration) ? raw.duration : 30,
+    duration,
     topics: parseTopics(topicsRaw),
     note,
   };
@@ -181,6 +189,7 @@ export async function logToGoogleSheets(record: BookingRecord): Promise<void> {
     時段: record.slot,
     討論內容: record.topics.join("、"),
     備註: record.note,
+    durationMinutes: record.duration,
   };
 
   if (!GAS_WEB_APP_URL) {
