@@ -27,7 +27,7 @@ import {
 
 /** 表單「日期」下拉：含今日起共幾個曆日可選（跨月） */
 const FORM_BOOKING_WINDOW_DAYS = 30;
-import { loadTeacherPatchesFromStorage, saveTeacherPatchesToStorage } from "./storage";
+import { loadBookingsFromStorage, loadTeacherPatchesFromStorage, saveTeacherPatchesToStorage } from "./storage";
 import type { BookingFormValue, BookingRecord, CalendarDateView, OpenDateConfig, Topic } from "./types";
 
 const EMPTY_FORM: BookingFormValue = {
@@ -65,7 +65,7 @@ export default function App() {
   const [teacherPatches, setTeacherPatches] = useState<OpenDateConfig[]>(() =>
     loadTeacherPatchesFromStorage()
   );
-  const [bookings, setBookings] = useState<BookingRecord[]>([]);
+  const [bookings, setBookings] = useState<BookingRecord[]>(() => loadBookingsFromStorage());
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [monthCursor, setMonthCursor] = useState(new Date());

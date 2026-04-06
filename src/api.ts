@@ -1,14 +1,43 @@
-import { TOPIC_OPTIONS } from "./data";
+import { INITIAL_BOOKINGS, TOPIC_OPTIONS } from "./data";
+import { mergeOpenDateConfigs } from "./date-utils";
 import type { BookingFormValue, BookingRecord, OpenDateConfig, SheetsDeletePayload, SheetsPayload, Topic } from "./types";
-import { loadBookingsFromStorage, saveBookingsToStorage, saveTeacherPatchesToStorage } from "./storage";
+import {
+  loadBookingsFromStorage,
+  loadTeacherPatchesFromStorage,
+  saveBookingsToStorage,
+  saveTeacherPatchesToStorage,
+} from "./storage";
 
 const GAS_WEB_APP_URL = import.meta.env.VITE_GAS_WEB_APP_URL as string | undefined;
 
 const TOPIC_SET = new Set<string>(TOPIC_OPTIONS);
+const MOCK_BOOKING_IDS = new Set(INITIAL_BOOKINGS.map((b) => b.id));
+
+/**
+ * 伺服器列舉與本機合併：同 id 以伺服器為準；僅在本機的 id（例如尚未寫入試算表成功）保留。
+ * 若伺服器回傳空陣列但本機有資料，不覆寫本機（避免試算表讀取失敗時清空畫面）。
+ */
+function mergeBookingsFromServer(server: BookingRecord[], local: BookingRecord[]): BookingRecord[] {
+  if (server.length === 0 && local.length > 0) {
+    return [...local];
+  }
+  const byId = new Map<string, BookingRecord>();
+  for (const b of server) {
+    if (b.id) byId.set(b.id, b);
+  }
+  for (const b of local) {
+    if (!b.id || byId.has(b.id)) continue;
+    if (server.length > 0 && MOCK_BOOKING_IDS.has(b.id)) continue;
+    byId.set(b.id, b);
+  }
+  return [...byId.values()].sort((a, b) => a.date.localeCompare(b.date) || a.slot.localeCompare(b.slot));
+}
 
 function parseTopics(raw: unknown): Topic[] {
   if (Array.isArray(raw)) {
-    return raw.filter((t): t is Topic => typeof t === "string" && TOPIC_SET.has(t));
+    return raw
+      .map((t) => (typeof t === "string" ? t.trim() : ""))
+      .filter((t): t is Topic => TOPIC_SET.has(t));
   }
   const s = String(raw ?? "");
   if (!s.trim()) return [];
@@ -47,28 +76,38 @@ export async function syncAppStateFromServer(): Promise<{
   teacherPatches: OpenDateConfig[];
 } | null> {
   if (!GAS_WEB_APP_URL) return null;
+  const localBookings = loadBookingsFromStorage();
+  const localPatches = loadTeacherPatchesFromStorage();
   try {
     const res = await fetch(GAS_WEB_APP_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({ action: "getState" }),
     });
-    const json = (await res.json()) as {
-      ok?: boolean;
-      bookings?: unknown[];
-      teacherPatches?: unknown;
-    };
+    const rawText = await res.text();
+    if (!res.ok) {
+      console.warn("[TMLab] getState HTTP", res.status, rawText.slice(0, 200));
+      return null;
+    }
+    let json: { ok?: boolean; bookings?: unknown[]; teacherPatches?: unknown };
+    try {
+      json = JSON.parse(rawText) as typeof json;
+    } catch {
+      console.warn("[TMLab] getState response is not JSON", rawText.slice(0, 200));
+      return null;
+    }
     if (!json.ok || !Array.isArray(json.bookings)) return null;
 
-    const bookings = json.bookings.map((row) => normalizeBooking(row as Record<string, unknown>));
-    let teacherPatches: OpenDateConfig[] = [];
-    if (Array.isArray(json.teacherPatches)) {
-      teacherPatches = json.teacherPatches as OpenDateConfig[];
-    }
-    bookingStore = [...bookings];
+    const serverBookings = json.bookings.map((row) => normalizeBooking(row as Record<string, unknown>));
+    const serverPatches = Array.isArray(json.teacherPatches) ? (json.teacherPatches as OpenDateConfig[]) : [];
+
+    const mergedBookings = mergeBookingsFromServer(serverBookings, localBookings);
+    const mergedPatches = mergeOpenDateConfigs(serverPatches, localPatches);
+
+    bookingStore = mergedBookings;
     persistBookings();
-    saveTeacherPatchesToStorage(teacherPatches);
-    return { bookings: bookingStore, teacherPatches };
+    saveTeacherPatchesToStorage(mergedPatches);
+    return { bookings: bookingStore, teacherPatches: mergedPatches };
   } catch (e) {
     console.warn("[TMLab] syncAppStateFromServer failed", e);
     return null;

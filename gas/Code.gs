@@ -41,6 +41,23 @@ function getSpreadsheet_() {
   return SpreadsheetApp.getActiveSpreadsheet();
 }
 
+/** 分頁名稱允許與試算表上完全一致（避免尾端空白導致讀不到列） */
+function getSheetByNameTrim_(ss, name) {
+  var exact = ss.getSheetByName(name);
+  if (exact) return exact;
+  var target = String(name).trim();
+  var sheets = ss.getSheets();
+  for (var i = 0; i < sheets.length; i++) {
+    if (String(sheets[i].getName()).trim() === target) return sheets[i];
+  }
+  return null;
+}
+
+function cellToIsoOrString_(v) {
+  if (v instanceof Date) return v.toISOString();
+  return v != null ? String(v) : "";
+}
+
 /**
  * 瀏覽器直接開 Web App 網址 = GET，必須有 doGet，否則會報錯。
  */
@@ -92,7 +109,7 @@ function doPost(e) {
  */
 function listBookings_() {
   var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAME);
+  var sheet = getSheetByNameTrim_(ss, SHEET_NAME);
   if (!sheet || sheet.getLastRow() < 2) {
     return [];
   }
@@ -112,7 +129,7 @@ function listBookings_() {
     var idCell = row[6] != null ? String(row[6]).trim() : "";
     out.push({
       id: idCell || "sheet-row-" + (i + 2),
-      timestamp: row[0] != null ? String(row[0]) : "",
+      timestamp: cellToIsoOrString_(row[0]),
       name: row[1] != null ? String(row[1]) : "",
       date: row[2] != null ? String(row[2]) : "",
       slot: row[3] != null ? String(row[3]) : "",
