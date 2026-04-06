@@ -5,7 +5,9 @@ import {
   formatDateLabel,
   formatMonthTitle,
   getWeekdayHeaders,
+  isCalendarDateBeforeToday,
   isHoliday,
+  isMondayOrThursday,
   startOfMonthGrid,
   toDateString,
 } from "./date-utils";
@@ -25,6 +27,8 @@ function topicText(topics: Topic[]): string {
 }
 
 export default function App() {
+  const todayStr = toDateString(new Date());
+
   const [form, setForm] = useState<BookingFormValue>(EMPTY_FORM);
   const [openDates, setOpenDates] = useState<OpenDateConfig[]>([]);
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
@@ -326,10 +330,20 @@ export default function App() {
               const inCurrentMonth = monthCursor.getMonth() === new Date(`${day.date}T00:00:00`).getMonth();
               const totalBookings = day.slots.reduce((acc, slot) => acc + slot.bookings.length, 0);
               const canTeacherAdd = teacherEditMode && !day.isHoliday && day.slots.length === 0;
+              const isPast = isCalendarDateBeforeToday(day.date);
+              const isFixedOpenWeekday = isMondayOrThursday(day.date);
               return (
                 <article
                   key={day.date}
-                  className={`month-cell ${!inCurrentMonth ? "outside" : ""} ${day.isHoliday ? "holiday" : ""}`}
+                  className={[
+                    "month-cell",
+                    !inCurrentMonth ? "outside" : "",
+                    day.isHoliday ? "holiday" : "",
+                    isPast ? "past" : "",
+                    isFixedOpenWeekday && !day.isHoliday ? "fixed-open" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                   onClick={() => setSelectedDate(day.date)}
                 >
                   <div className="cell-head">
@@ -355,7 +369,13 @@ export default function App() {
                     {day.isHoliday ? (
                       <p className="holiday-text">{day.holidayName}</p>
                     ) : totalBookings === 0 ? (
-                      <p className="empty">尚無預約</p>
+                      <p className="empty">
+                        {!day.slots.length
+                          ? "未開放"
+                          : isFixedOpenWeekday
+                            ? "尚無預約"
+                            : "未開放"}
+                      </p>
                     ) : (
                       day.slots
                         .filter((slot) => slot.bookings.length > 0)

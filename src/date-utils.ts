@@ -34,6 +34,21 @@ export function toDateString(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+/** 0=週日 … 6=週六（依本機時區） */
+export function getWeekdayIndex(dateStr: string): number {
+  return new Date(`${dateStr}T12:00:00`).getDay();
+}
+
+export function isMondayOrThursday(dateStr: string): boolean {
+  const w = getWeekdayIndex(dateStr);
+  return w === 1 || w === 4;
+}
+
+/** 僅比較日曆日：dateStr 是否早於今天 */
+export function isCalendarDateBeforeToday(dateStr: string): boolean {
+  return dateStr < toDateString(new Date());
+}
+
 export function buildOpenDateConfigs(from = new Date(), weeks = 6): OpenDateConfig[] {
   const map = new Map<string, OpenDateConfig>();
   const start = new Date(from);

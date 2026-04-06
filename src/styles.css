@@ -223,6 +223,22 @@ textarea {
   background: #fff7ed;
 }
 
+/* 固定開放：週一 / 週四（非國定假日） */
+.month-cell.fixed-open {
+  background: #e8f5e9;
+}
+
+/* 已過日期：對齊「今天」之前，整格壓暗 */
+.month-cell.past {
+  opacity: 0.55;
+  filter: grayscale(0.25);
+  color: #6b7280;
+}
+
+.month-cell.past .cell-head span {
+  color: #4b5563;
+}
+
 .cell-head {
   display: flex;
   justify-content: space-between;
