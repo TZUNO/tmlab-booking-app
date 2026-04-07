@@ -144,6 +144,10 @@ main.layout {
   max-width: 42ch;
 }
 
+.panel-policy-note--warn {
+  color: #b45309;
+}
+
 .calendar-title-note {
   font-size: 0.76rem;
   font-weight: 600;

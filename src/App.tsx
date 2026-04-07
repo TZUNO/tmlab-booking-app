@@ -52,6 +52,14 @@ const TEACHER_SLOT_PRESETS: { label: string; start: string; end: string }[] = [
   { label: "19:00–20:00", start: "19:00", end: "20:00" },
 ];
 
+/** 預約截止：該日期「前一天 21:00」 */
+function isBeforeBookingDeadline(dateStr: string, now = new Date()): boolean {
+  const dayStart = new Date(`${dateStr}T00:00:00`);
+  dayStart.setDate(dayStart.getDate() - 1);
+  dayStart.setHours(21, 0, 0, 0);
+  return now.getTime() <= dayStart.getTime();
+}
+
 export default function App() {
   const todayStr = toDateString(new Date());
   /** 老師新增開放時段：09:00 起至 20:00；開始最晚 19:00 */
@@ -175,11 +183,11 @@ export default function App() {
     [baseOpenFormWindow, baseOpenThisMonth, teacherPatches]
   );
 
-  /** 表單僅列出「今天起（含）」30 天內可預約日（可跨月） */
+  /** 表單僅列出「截止時間內」且位於 30 天窗口的可預約日（可跨月） */
   const dateOptions = useMemo(
     () =>
       openDates
-        .filter((d) => d.date >= todayStr && d.date <= formRangeEndStr)
+        .filter((d) => d.date >= todayStr && d.date <= formRangeEndStr && isBeforeBookingDeadline(d.date))
         .map((d) => d.date)
         .sort(),
     [openDates, todayStr, formRangeEndStr]
@@ -252,6 +260,10 @@ export default function App() {
     e.preventDefault();
     if (!form.name || !form.date || !form.slot || form.topics.length === 0) {
       setMessage("請完整填寫姓名、日期、時段與討論內容。");
+      return;
+    }
+    if (!isBeforeBookingDeadline(form.date)) {
+      setMessage("已超過可填寫時間：最晚需於預約日前一天 21:00 完成預約。");
       return;
     }
     if (selectedSlotSource === "extra" && !form.note.trim()) {
@@ -397,7 +409,10 @@ export default function App() {
         <section className="panel form-panel">
           <h2>填表預約</h2>
           <p className="panel-policy-note" role="note">
-            若要改日期、時段或耗時，請先在右側行事曆明細刪除原預約，再於此重新填寫（不提供線上修改）。
+            最晚請於預約日前一天 21:00 完成填寫。若要改日期、時段或耗時，請先在右側行事曆明細刪除原預約，再於此重新填寫（不提供線上修改）。
+          </p>
+          <p className="panel-policy-note panel-policy-note--warn" role="note">
+            後台會紀錄所有填寫內容，請勿刪除其他同學的預約。
           </p>
           <form onSubmit={onSubmit} className="form">
             <label>
