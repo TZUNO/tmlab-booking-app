@@ -12,7 +12,7 @@ export const STUDENT_GROUPS: StudentGroup[] = [
   { label: "其他", students: ["大四 / 碩0 / 外部"] },
 ];
 
-export const TOPIC_OPTIONS: Topic[] = ["計劃執行", "生涯", "純聊天", "碩博論", "研討會或期刊"];
+export const TOPIC_OPTIONS: Topic[] = ["計劃執行", "生涯", "純聊天", "碩博論", "研討會或期刊", "設計或競賽", "其他備註"];
 
 export const DURATION_OPTIONS = [10, 20, 30, 60, 90, 120];
 

@@ -401,7 +401,7 @@ export default function App() {
           研究室・表單日期僅列出「今日起」30 天內可預約日（可跨月）
         </p>
         <p>
-          週一與週四以外時間請私訊老師確認是否額外開放，碩一以上要提報（口考）的同學，請自行注意討論的次數與研究進度
+          週一與週四以外時間請私訊老師確認是否額外開放，碩一以上要提報（口考）的同學，請自行注意討論的次數與研究進度。後台會紀錄所有填寫內容，請勿刪除其他同學的預約。
         </p>
       </header>
 
@@ -410,9 +410,6 @@ export default function App() {
           <h2>填表預約</h2>
           <p className="panel-policy-note" role="note">
             最晚請於預約日前一天 21:00 完成填寫。若要改日期、時段或耗時，請先在右側行事曆明細刪除原預約，再於此重新填寫（不提供線上修改）。
-          </p>
-          <p className="panel-policy-note panel-policy-note--warn" role="note">
-            後台會紀錄所有填寫內容，請勿刪除其他同學的預約。
           </p>
           <form onSubmit={onSubmit} className="form">
             <label>

@@ -1,4 +1,4 @@
-export type Topic = "計劃執行" | "生涯" | "純聊天" | "碩博論" | "研討會或期刊";
+export type Topic = "計劃執行" | "生涯" | "純聊天" | "碩博論" | "研討會或期刊" | "設計或競賽" | "其他備註";
 
 export interface StudentGroup {
   label: string;
