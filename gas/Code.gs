@@ -282,3 +282,136 @@ function jsonOut_(obj) {
     ContentService.MimeType.JSON
   );
 }
+
+// ─────────────────────────────────────────────
+// 明日預約提醒 Email（週日、週三 21:30 自動發送）
+// ─────────────────────────────────────────────
+
+var NOTIFY_EMAIL = "kuroh.0103@gmail.com";
+
+var WEEKDAY_ZH = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
+
+/**
+ * 每日 21:30 執行，只在週日（0）或週三（3）實際寄信。
+ * GAS Trigger 請設定 sendTomorrowBookingEmailIfNeeded，每日 21:00–22:00。
+ */
+function sendTomorrowBookingEmailIfNeeded() {
+  var tz = Session.getScriptTimeZone();
+  var now = new Date();
+  var day = parseInt(Utilities.formatDate(now, tz, "u"), 10) % 7; // 0=Sun,1=Mon,...,6=Sat
+  if (day !== 0 && day !== 3) return; // 只在週日、週三執行
+  sendTomorrowBookingEmail_();
+}
+
+/**
+ * 手動測試用：直接呼叫即可預覽寄信結果。
+ */
+function sendTomorrowBookingEmailNow() {
+  sendTomorrowBookingEmail_();
+}
+
+function sendTomorrowBookingEmail_() {
+  var tz = Session.getScriptTimeZone();
+  var tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  var tomorrowYmd = Utilities.formatDate(tomorrow, tz, "yyyy-MM-dd");
+
+  // 取得明日所有預約
+  var all = listBookings_();
+  var rows = all.filter(function (b) {
+    return b.date === tomorrowYmd;
+  });
+
+  // 組合信件
+  var dateLabel = buildDateLabel_(tomorrow, tz);
+  var subject = "📅 明日討論提醒 " + dateLabel;
+  var body = buildEmailBody_(dateLabel, rows);
+
+  MailApp.sendEmail({
+    to: NOTIFY_EMAIL,
+    subject: subject,
+    body: body,
+  });
+}
+
+/** e.g. "4/9（週四）" */
+function buildDateLabel_(date, tz) {
+  var m = parseInt(Utilities.formatDate(date, tz, "M"), 10);
+  var d = parseInt(Utilities.formatDate(date, tz, "d"), 10);
+  var wdIdx = parseInt(Utilities.formatDate(date, tz, "u"), 10) % 7; // 0=Sun
+  return m + "/" + d + "（" + WEEKDAY_ZH[wdIdx] + "）";
+}
+
+function buildEmailBody_(dateLabel, rows) {
+  var lines = [];
+  lines.push("📅 明日討論提醒 " + dateLabel);
+
+  if (rows.length === 0) {
+    lines.push("");
+    lines.push("明日目前尚無預約。");
+  } else {
+    // 依時段分組，並按時段起始時間排序
+    var slotMap = {};
+    var slotOrder = [];
+    rows.forEach(function (b) {
+      var slot = b.slot || "（未填時段）";
+      if (!slotMap[slot]) {
+        slotMap[slot] = [];
+        slotOrder.push(slot);
+      }
+      slotMap[slot].push(b);
+    });
+
+    // 按時段起始時間（HH:MM）排序
+    slotOrder.sort(function (a, b) {
+      return slotStartKey_(a) - slotStartKey_(b);
+    });
+
+    slotOrder.forEach(function (slot) {
+      lines.push("");
+      lines.push(slot);
+      slotMap[slot].forEach(function (b) {
+        var name = b.name || "（未填姓名）";
+        var dur = b.duration || 30;
+        lines.push("・" + name + "（" + dur + "min）");
+      });
+    });
+  }
+
+  lines.push("");
+  lines.push("提醒請準時，如需異動請提前告知，謝謝 🙏");
+  lines.push("（自動信件發送，詳情請確認預約系統行事曆）");
+
+  return lines.join("\n");
+}
+
+/** "16:00–18:00" → 1600，方便排序 */
+function slotStartKey_(slot) {
+  var m = String(slot).match(/(\d{1,2}):(\d{2})/);
+  if (!m) return 9999;
+  return parseInt(m[1], 10) * 100 + parseInt(m[2], 10);
+}
+
+/**
+ * 建立每日 21:00–22:00 的時間觸發器（只需執行一次）。
+ * 若已有相同觸發器請勿重複執行，或先呼叫 removeDailyTrigger()。
+ */
+function setupDailyEmailTrigger() {
+  ScriptApp.newTrigger("sendTomorrowBookingEmailIfNeeded")
+    .timeBased()
+    .everyDays(1)
+    .atHour(21)
+    .create();
+  Logger.log("已建立每日 21:00–22:00 觸發器");
+}
+
+/** 移除所有 sendTomorrowBookingEmailIfNeeded 觸發器（用於重設）。 */
+function removeDailyEmailTrigger() {
+  var triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(function (t) {
+    if (t.getHandlerFunction() === "sendTomorrowBookingEmailIfNeeded") {
+      ScriptApp.deleteTrigger(t);
+    }
+  });
+  Logger.log("已移除觸發器");
+}
