@@ -1,9 +1,7 @@
 import type { BookingRecord, StudentGroup, Topic } from "./types";
 
 export const STUDENT_GROUPS: StudentGroup[] = [
-  { label: "博四", students: ["侯政伯"] },
-  { label: "博二", students: ["李岱融", "張意", "蔡松柏"] },
-  { label: "博一", students: ["曾紫諾"] },
+  { label: "博班", students: ["侯政伯", "李岱融", "張意", "蔡松柏", "曾紫諾"] },
   { label: "日碩二", students: ["王瑜", "林芷瑩", "楊文騵"] },
   { label: "日碩一", students: ["褚允萱", "卓苡姍", "羅廣軒", "陳苡榛"] },
   { label: "職碩四", students: ["朱易晴", "張煥", "李泰頡"] },
