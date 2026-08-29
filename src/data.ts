@@ -12,7 +12,7 @@ export const STUDENT_GROUPS: StudentGroup[] = [
   { label: "其他", students: ["大學部 / 已畢業 / 外部"] },
 ];
 
-export const TOPIC_OPTIONS: Topic[] = ["計劃執行", "生涯", "純聊天", "碩博論", "研討會或期刊", "設計或競賽", "其他備註"];
+export const TOPIC_OPTIONS: Topic[] = ["計劃執行", "生涯", "純聊天", "學位論文", "研討會或期刊", "設計或競賽", "其他備註"];
 
 export const DURATION_OPTIONS = [10, 20, 30, 60, 90, 120];
 
@@ -40,7 +40,7 @@ export const INITIAL_BOOKINGS: BookingRecord[] = [
     date: "2026-04-09",
     slot: "16:00-17:00",
     duration: 30,
-    topics: ["碩博論"],
+    topics: ["學位論文"],
     note: "想討論論文架構與研究方法。",
   },
   {
