@@ -1,16 +1,16 @@
 import type { BookingRecord, StudentGroup, Topic } from "./types";
 
 export const STUDENT_GROUPS: StudentGroup[] = [
-  { label: "日碩二", students: ["林羿伶", "趙怡捷", "曾紫諾", "朱容愷"] },
-  { label: "日碩一", students: ["王瑜", "林芷瑩", "楊文騵"] },
-  { label: "日碩0", students: ["褚允萱", "卓苡姍", "羅廣軒"] },
-  { label: "職碩四", students: ["陳田洋", "張煥", "李泰頡"] },
-  { label: "職碩三", students: ["朱易晴", "曾翰銘"] },
-  { label: "職碩二", students: ["何詩嬋", "蔡旻璇", "楊景惠", "邱苡甄", "李姍倪", "盧昱廷"] },
-  { label: "職碩一", students: ["林倩如", "鄭力瑋", "謝芳芳", "詹睿騰"] },
-  { label: "職碩0", students: ["張筱蓓", "龐甄嬉", "顏慈君"] },
-  { label: "博班", students: ["侯政伯", "李岱融", "張意", "蔡松柏"] },
-  { label: "研究員", students: ["李佳珍"] },
+  { label: "博四", students: ["侯政伯"] },
+  { label: "博二", students: ["李岱融", "張意", "蔡松柏"] },
+  { label: "博一", students: ["曾紫諾"] },
+  { label: "日碩二", students: ["王瑜", "林芷瑩", "楊文騵"] },
+  { label: "日碩一", students: ["褚允萱", "卓苡姍", "羅廣軒", "陳苡榛"] },
+  { label: "職碩四", students: ["朱易晴", "張煥", "李泰頡"] },
+  { label: "職碩三", students: ["何詩嬋", "蔡旻璇", "楊景惠", "邱苡甄", "李姍倪", "盧昱廷"] },
+  { label: "職碩二", students: ["林倩如", "鄭力瑋", "謝芳芳", "詹睿騰"] },
+  { label: "職碩一", students: ["張筱蓓", "龐甄嬉", "顏慈君"] },
+  { label: "交換未離校", students: ["趙怡捷", "朱容愷"] },
   { label: "其他", students: ["大學部 / 已畢業 / 外部"] },
 ];
 
@@ -38,7 +38,7 @@ export const INITIAL_BOOKINGS: BookingRecord[] = [
   {
     id: "b1",
     timestamp: "2026-04-03T09:20:00.000Z",
-    name: "林羿伶",
+    name: "王瑜",
     date: "2026-04-09",
     slot: "16:00-17:00",
     duration: 30,
@@ -58,7 +58,7 @@ export const INITIAL_BOOKINGS: BookingRecord[] = [
   {
     id: "b3",
     timestamp: "2026-04-04T08:50:00.000Z",
-    name: "李佳珍",
+    name: "曾紫諾",
     date: "2026-04-13",
     slot: "18:00-19:00",
     duration: 60,

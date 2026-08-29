@@ -406,6 +406,18 @@ textarea {
   background: #e8f5e9;
 }
 
+/* 老師關閉整天（會議等）：灰底斜紋，與可預約綠底明顯區隔 */
+.month-cell.closed-day {
+  background: repeating-linear-gradient(
+    135deg,
+    #f3f4f6,
+    #f3f4f6 6px,
+    #e5e7eb 6px,
+    #e5e7eb 12px
+  );
+  color: #6b7280;
+}
+
 /* 已過日期：再加深，與未來區隔 */
 .month-cell.past {
   opacity: 0.88;
@@ -554,6 +566,44 @@ textarea {
   background: #eff6ff;
 }
 
+.badge.closed {
+  color: #475569;
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+}
+
+.detail-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.close-day-btn,
+.reopen-day-btn,
+.close-slot-btn {
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.close-day-btn,
+.close-slot-btn {
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+}
+
+.reopen-day-btn {
+  border: 1px solid #86efac;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
 .holiday-text {
   margin: 0;
   font-size: 0.9rem;
@@ -627,6 +677,20 @@ textarea {
   display: grid;
   gap: 4px;
   font-size: 0.84rem;
+}
+
+.orphan-bookings {
+  margin-top: 12px;
+  border-top: 1px dashed #cbd5e1;
+  padding-top: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.orphan-bookings-head {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: #b45309;
 }
 
 .delete-btn {

@@ -187,7 +187,13 @@ export default function App() {
   const dateOptions = useMemo(
     () =>
       openDates
-        .filter((d) => d.date >= todayStr && d.date <= formRangeEndStr && isBeforeBookingDeadline(d.date))
+        .filter(
+          (d) =>
+            d.slots.length > 0 &&
+            d.date >= todayStr &&
+            d.date <= formRangeEndStr &&
+            isBeforeBookingDeadline(d.date)
+        )
         .map((d) => d.date)
         .sort(),
     [openDates, todayStr, formRangeEndStr]
@@ -245,6 +251,7 @@ export default function App() {
         isHoliday: holiday.isHoliday,
         holidayName: holiday.name,
         isExtraOpen: open?.isExtraOpen ?? false,
+        closedSlots: open?.closedSlots ?? [],
         slots,
       });
     }
@@ -255,6 +262,13 @@ export default function App() {
     const fallback = selectedDate || form.date || toDateString(new Date());
     return calendarData.find((d) => d.date === fallback);
   }, [calendarData, selectedDate, form.date]);
+
+  /** 該日仍存在、但時段已被關閉／移除的預約，避免資料被藏起來無法處理 */
+  const orphanBookings = useMemo(() => {
+    if (!selectedDateView) return [];
+    const openTimes = new Set(selectedDateView.slots.map((s) => s.time));
+    return bookings.filter((b) => b.date === selectedDateView.date && !openTimes.has(b.slot));
+  }, [selectedDateView, bookings]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -323,13 +337,91 @@ export default function App() {
     setMessage(`已移除 ${formatDateLabel(date)} 的額外時段：${slotTime}`);
   }
 
+  /** 將時段加入 closedSlots：關閉後同學無法預約，既有預約仍保留 */
+  function markSlotsClosed(prev: OpenDateConfig[], date: string, times: string[]): OpenDateConfig[] {
+    const found = prev.find((item) => item.date === date);
+    if (!found) {
+      return [...prev, { date, isExtraOpen: false, slots: [], closedSlots: [...times] }].sort((a, b) =>
+        a.date.localeCompare(b.date)
+      );
+    }
+    return prev.map((item) =>
+      item.date === date
+        ? {
+            ...item,
+            /** 額外開放時段被關閉時直接移除，固定時段則靠 closedSlots 濾掉 */
+            slots: item.slots.filter((s) => !times.includes(s.time)),
+            closedSlots: [...new Set([...(item.closedSlots ?? []), ...times])],
+          }
+        : item
+    );
+  }
+
+  /** 老師關閉單一時段（例如當天 18:00 有會議） */
+  function closeSlot(date: string, slotTime: string) {
+    if (!syncReady) {
+      setMessage("與試算表同步中，請稍候再試。");
+      return;
+    }
+    const cnt = bookings.filter((b) => b.date === date && b.slot === slotTime).length;
+    const ok = window.confirm(
+      cnt > 0
+        ? `此時段已有 ${cnt} 筆預約。關閉後同學無法再預約，既有預約會列在明細下方「已關閉時段的既有預約」，請通知同學改期。確定關閉 ${slotTime}？`
+        : `確定關閉 ${formatDateLabel(date)} 的 ${slotTime}？關閉後同學無法預約此時段。`
+    );
+    if (!ok) return;
+    teacherPatchesDirtyRef.current = true;
+    setTeacherPatches((prev) => markSlotsClosed(prev, date, [slotTime]));
+    setMessage(`已關閉 ${formatDateLabel(date)} 的時段：${slotTime}`);
+  }
+
+  /** 老師關閉整天（週一／週四臨時有會議） */
+  function closeWholeDay(date: string, slotTimes: string[]) {
+    if (!syncReady) {
+      setMessage("與試算表同步中，請稍候再試。");
+      return;
+    }
+    if (slotTimes.length === 0) {
+      setMessage("當日沒有開放中的時段。");
+      return;
+    }
+    const cnt = bookings.filter((b) => b.date === date && slotTimes.includes(b.slot)).length;
+    const ok = window.confirm(
+      cnt > 0
+        ? `${formatDateLabel(date)} 已有 ${cnt} 筆預約。關閉整天後同學無法再預約，既有預約會列在明細下方「已關閉時段的既有預約」，請通知同學改期。確定關閉整天？`
+        : `確定關閉 ${formatDateLabel(date)} 全天共 ${slotTimes.length} 個時段？`
+    );
+    if (!ok) return;
+    teacherPatchesDirtyRef.current = true;
+    setTeacherPatches((prev) => markSlotsClosed(prev, date, slotTimes));
+    setMessage(`已關閉 ${formatDateLabel(date)} 全天時段。`);
+  }
+
+  /** 恢復該日被關閉的固定時段（先前被關閉的額外時段不會自動回來） */
+  function reopenDate(date: string) {
+    if (!syncReady) {
+      setMessage("與試算表同步中，請稍候再試。");
+      return;
+    }
+    teacherPatchesDirtyRef.current = true;
+    setTeacherPatches((prev) => {
+      const found = prev.find((item) => item.date === date);
+      if (!found) return prev;
+      if (found.slots.length === 0) {
+        return prev.filter((item) => item.date !== date);
+      }
+      return prev.map((item) => (item.date === date ? { ...item, closedSlots: [] } : item));
+    });
+    setMessage(`已恢復 ${formatDateLabel(date)} 的固定開放時段。`);
+  }
+
   function mergeExtraSlots(date: string, slotTimes: string[]) {
     teacherPatchesDirtyRef.current = true;
     const newSlots = slotTimes.map((time) => ({ time, source: "extra" as const }));
     setTeacherPatches((prev) => {
       const found = prev.find((item) => item.date === date);
       if (!found) {
-        return [...prev, { date, isExtraOpen: true, slots: newSlots }].sort((a, b) =>
+        return [...prev, { date, isExtraOpen: true, closedSlots: [], slots: newSlots }].sort((a, b) =>
           a.date.localeCompare(b.date)
         );
       }
@@ -340,6 +432,8 @@ export default function App() {
           ? {
               ...item,
               isExtraOpen: true,
+              /** 重新加回同一時段時，解除先前的關閉 */
+              closedSlots: (item.closedSlots ?? []).filter((t) => !slotTimes.includes(t)),
               slots: [...merged.values()].sort((a, b) => a.time.localeCompare(b.time)),
             }
           : item
@@ -401,7 +495,7 @@ export default function App() {
           研究室・表單日期僅列出「今日起」30 天內可預約日（可跨月）
         </p>
         <p>
-          週一與週四以外時間請私訊老師確認是否額外開放，碩一以上要提報（口考）的同學，請自行注意討論的次數與研究進度。後台會紀錄所有填寫內容，請勿刪除其他同學的預約。
+          週一或週四若老師另有會議，該時段會顯示為「關閉」而無法預約，請以行事曆為準。週一與週四以外時間請私訊老師確認是否額外開放，碩一以上要提報（口考）的同學，請自行注意討論的次數與研究進度。後台會紀錄所有填寫內容，請勿刪除其他同學的預約。
         </p>
       </header>
 
@@ -597,6 +691,9 @@ export default function App() {
                   const isPast = isCalendarDateBeforeToday(day.date);
                   const hasOpenSlots = day.slots.length > 0 && !day.isHoliday;
                   const isBookableGreen = hasOpenSlots && !isPast;
+                  /** 老師關閉過時段；全部關閉時整格標為關閉 */
+                  const hasClosedSlots = !day.isHoliday && day.closedSlots.length > 0;
+                  const isClosedDay = hasClosedSlots && day.slots.length === 0;
                   return (
                     <article
                       key={day.date}
@@ -606,6 +703,7 @@ export default function App() {
                         day.isHoliday ? "holiday" : "",
                         isPast ? "past" : "",
                         isBookableGreen ? "bookable-open" : "",
+                        isClosedDay ? "closed-day" : "",
                       ]
                         .filter(Boolean)
                         .join(" ")}
@@ -616,6 +714,11 @@ export default function App() {
                         <div className="badges">
                           {day.isHoliday ? <span className="badge holiday">休</span> : null}
                           {!day.isHoliday && day.isExtraOpen ? <span className="badge extra">額外</span> : null}
+                          {hasClosedSlots ? (
+                            <span className="badge closed" title={`已關閉：${day.closedSlots.join("、")}`}>
+                              {isClosedDay ? "關閉" : "部分關閉"}
+                            </span>
+                          ) : null}
                           {canTeacherAdd ? (
                             <button
                               type="button"
@@ -636,6 +739,8 @@ export default function App() {
                         ) : totalBookings === 0 ? (
                           day.slots.length > 0 ? (
                             <p className="empty">尚無預約</p>
+                          ) : isClosedDay ? (
+                            <p className="empty">老師今日不開放</p>
                           ) : null
                         ) : (
                           (() => {
@@ -683,17 +788,51 @@ export default function App() {
           <div className="detail-board">
             <div className="detail-head">
               <strong>{selectedDateView ? formatDateLabel(selectedDateView.date) : "請選擇日期"}</strong>
-              {selectedDateView && !selectedDateView.isHoliday && selectedDateView.isExtraOpen ? (
-                <span className="badge extra">額外開放</span>
-              ) : null}
+              <div className="detail-head-actions">
+                {selectedDateView && !selectedDateView.isHoliday && selectedDateView.isExtraOpen ? (
+                  <span className="badge extra">額外開放</span>
+                ) : null}
+                {selectedDateView && !selectedDateView.isHoliday && selectedDateView.closedSlots.length > 0 ? (
+                  <span className="badge closed">已關閉 {selectedDateView.closedSlots.length} 個時段</span>
+                ) : null}
+                {teacherEditMode && selectedDateView && !selectedDateView.isHoliday ? (
+                  <>
+                    {selectedDateView.slots.length > 0 ? (
+                      <button
+                        type="button"
+                        className="close-day-btn"
+                        onClick={() =>
+                          closeWholeDay(
+                            selectedDateView.date,
+                            selectedDateView.slots.map((s) => s.time)
+                          )
+                        }
+                      >
+                        關閉整天
+                      </button>
+                    ) : null}
+                    {selectedDateView.closedSlots.length > 0 ? (
+                      <button type="button" className="reopen-day-btn" onClick={() => reopenDate(selectedDateView.date)}>
+                        恢復開放
+                      </button>
+                    ) : null}
+                  </>
+                ) : null}
+              </div>
             </div>
             {selectedDateView ? (
               selectedDateView.isHoliday ? (
                 <p className="holiday-text">國定假日不可預約（{selectedDateView.holidayName}）。</p>
               ) : selectedDateView.slots.length === 0 ? (
                 <p className="empty">
-                  當日尚未開放時段。
-                  {teacherEditMode ? "可用月曆格內 + 老師新增。" : "請由老師開啟編輯模式後新增。"}
+                  {selectedDateView.closedSlots.length > 0
+                    ? "老師今日不開放（例如另有會議），暫時無法預約。"
+                    : "當日尚未開放時段。"}
+                  {teacherEditMode
+                    ? selectedDateView.closedSlots.length > 0
+                      ? "可按上方「恢復開放」還原固定時段。"
+                      : "可用月曆格內 + 老師新增。"
+                    : ""}
                 </p>
               ) : (
                 <ul className="slots">
@@ -701,14 +840,24 @@ export default function App() {
                     <li key={`${selectedDateView.date}-${slot.time}`} className="slot">
                       <div className="slot-time-row">
                         <div className="slot-time">{slot.time}</div>
-                        {teacherEditMode && slot.source === "extra" ? (
-                          <button
-                            type="button"
-                            className="remove-extra-slot-btn"
-                            onClick={() => removeTeacherExtraSlot(selectedDateView.date, slot.time)}
-                          >
-                            刪除此額外時段
-                          </button>
+                        {teacherEditMode ? (
+                          slot.source === "extra" ? (
+                            <button
+                              type="button"
+                              className="remove-extra-slot-btn"
+                              onClick={() => removeTeacherExtraSlot(selectedDateView.date, slot.time)}
+                            >
+                              刪除此額外時段
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="close-slot-btn"
+                              onClick={() => closeSlot(selectedDateView.date, slot.time)}
+                            >
+                              關閉此時段
+                            </button>
+                          )
                         ) : null}
                       </div>
                       {slot.bookings.length === 0 ? (
@@ -736,6 +885,26 @@ export default function App() {
             ) : (
               <p className="empty">請在月曆中點選日期查看明細。</p>
             )}
+            {selectedDateView && orphanBookings.length > 0 ? (
+              <div className="orphan-bookings">
+                <div className="orphan-bookings-head">已關閉時段的既有預約</div>
+                <p className="empty">此時段已關閉，以下預約仍存在，請通知同學改期後刪除。</p>
+                <div className="records">
+                  {orphanBookings.map((booking) => (
+                    <div key={booking.id} className="record">
+                      <div>
+                        <strong>{booking.name}</strong> ・ {booking.slot} ・ {booking.duration} 分鐘
+                      </div>
+                      <div>主題：{topicText(booking.topics)}</div>
+                      <div>備註：{booking.note || "—"}</div>
+                      <button type="button" className="delete-btn" onClick={() => onDelete(booking.id)}>
+                        刪除此筆
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
             </div>
           </div>

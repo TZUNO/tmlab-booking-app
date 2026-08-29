@@ -123,8 +123,13 @@ function listBookings_() {
     return [];
   }
   var lastRow = sheet.getLastRow();
+  /** 自第 2 列起的資料列數；用 lastRow 會多讀一列，資料列滿版時還會讓 getRange 拋錯 */
+  var numRows = lastRow - 1;
+  if (numRows < 1) {
+    return [];
+  }
   var numCols = Math.max(sheet.getLastColumn(), 8);
-  var values = sheet.getRange(2, 1, lastRow, numCols).getValues();
+  var values = sheet.getRange(2, 1, numRows, numCols).getValues();
   var out = [];
   for (var i = 0; i < values.length; i++) {
     var row = values[i];

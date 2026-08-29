@@ -197,7 +197,7 @@ export function buildOpenDateConfigsForMonth(cursor: Date): OpenDateConfig[] {
   return [...map.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 
-/** 將老師補上的時段合併到當月基底（同日期合併 slot 清單） */
+/** 將老師補上的時段合併到當月基底（同日期合併 slot 清單），並套用老師關閉的時段 */
 export function mergeOpenDateConfigs(base: OpenDateConfig[], patches: OpenDateConfig[]): OpenDateConfig[] {
   const map = new Map<string, OpenDateConfig>();
   for (const d of base) {
@@ -205,6 +205,7 @@ export function mergeOpenDateConfigs(base: OpenDateConfig[], patches: OpenDateCo
       date: d.date,
       isExtraOpen: d.isExtraOpen,
       slots: [...d.slots],
+      closedSlots: [...(d.closedSlots ?? [])],
     });
   }
   for (const p of patches) {
@@ -214,6 +215,7 @@ export function mergeOpenDateConfigs(base: OpenDateConfig[], patches: OpenDateCo
         date: p.date,
         isExtraOpen: p.isExtraOpen,
         slots: [...p.slots],
+        closedSlots: [...(p.closedSlots ?? [])],
       });
     } else {
       const slotMap = new Map(existing.slots.map((s) => [s.time, s]));
@@ -222,9 +224,17 @@ export function mergeOpenDateConfigs(base: OpenDateConfig[], patches: OpenDateCo
       }
       existing.slots = [...slotMap.values()].sort((a, b) => a.time.localeCompare(b.time));
       existing.isExtraOpen = existing.isExtraOpen || p.isExtraOpen;
+      existing.closedSlots = [...new Set([...(existing.closedSlots ?? []), ...(p.closedSlots ?? [])])];
     }
   }
-  return [...map.values()].sort((a, b) => a.date.localeCompare(b.date));
+  /** 老師關閉的時段一律移出可預約清單（closedSlots 仍保留，供 UI 顯示與恢復） */
+  return [...map.values()]
+    .map((d) => {
+      const closed = new Set(d.closedSlots ?? []);
+      if (closed.size === 0) return d;
+      return { ...d, slots: d.slots.filter((s) => !closed.has(s.time)) };
+    })
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 /** @deprecated 請改用 buildOpenDateConfigsForMonth；保留供舊程式參考 */
@@ -288,6 +298,7 @@ export function buildCalendarWithHolidays(openDateConfigs: OpenDateConfig[]): Ca
       isHoliday: holiday.isHoliday,
       holidayName: holiday.name,
       isExtraOpen: open?.isExtraOpen ?? false,
+      closedSlots: open?.closedSlots ?? [],
       slots: (open?.slots ?? []).map((slot) => ({
         time: slot.time,
         source: slot.source,

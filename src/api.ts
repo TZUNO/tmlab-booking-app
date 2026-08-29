@@ -31,7 +31,10 @@ function cloneTeacherPatchesFromServer(patches: OpenDateConfig[]): OpenDateConfi
   return patches.map((c) => ({
     date: c.date,
     isExtraOpen: Boolean(c.isExtraOpen),
-    slots: c.slots.map(
+    closedSlots: Array.isArray(c.closedSlots)
+      ? c.closedSlots.map((t) => String(t).trim()).filter(Boolean)
+      : [],
+    slots: (Array.isArray(c.slots) ? c.slots : []).map(
       (s): TimeSlotConfig => ({
         time: s.time,
         source: s.source === "extra" ? "extra" : "fixed",

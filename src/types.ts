@@ -14,6 +14,8 @@ export interface OpenDateConfig {
   date: string; // YYYY-MM-DD
   slots: TimeSlotConfig[];
   isExtraOpen: boolean;
+  /** 老師關閉的時段（如 "16:00-17:00"）：會議等原因暫停，該時段不開放預約 */
+  closedSlots?: string[];
 }
 
 export interface BookingRecord {
@@ -48,6 +50,8 @@ export interface CalendarDateView {
   isHoliday: boolean;
   holidayName?: string;
   isExtraOpen: boolean;
+  /** 老師關閉的時段；slots 為空且此陣列非空＝整天關閉 */
+  closedSlots: string[];
   slots: CalendarSlotView[];
 }
 
