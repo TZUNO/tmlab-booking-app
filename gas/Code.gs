@@ -289,7 +289,7 @@ function jsonOut_(obj) {
 }
 
 // ─────────────────────────────────────────────
-// 明日預約提醒 Email（週日、週三 21:30 自動發送）
+// 明日預約提醒 Email（週一、週三 21:30 自動發送）
 // ─────────────────────────────────────────────
 
 var NOTIFY_EMAIL = "kuroh.0103@gmail.com";
@@ -297,14 +297,15 @@ var NOTIFY_EMAIL = "kuroh.0103@gmail.com";
 var WEEKDAY_ZH = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
 
 /**
- * 每日 21:30 執行，只在週日（0）或週三（3）實際寄信。
+ * 每日 21:30 執行，只在固定開放日的前一天實際寄信。
+ * 固定開放日自 2026-09-21 起為週二／週四，故於週一（1）、週三（3）寄出。
  * GAS Trigger 請設定 sendTomorrowBookingEmailIfNeeded，每日 21:00–22:00。
  */
 function sendTomorrowBookingEmailIfNeeded() {
   var tz = Session.getScriptTimeZone();
   var now = new Date();
   var day = parseInt(Utilities.formatDate(now, tz, "u"), 10) % 7; // 0=Sun,1=Mon,...,6=Sat
-  if (day !== 0 && day !== 3) return; // 只在週日、週三執行
+  if (day !== 1 && day !== 3) return; // 只在週一、週三執行
   sendTomorrowBookingEmail_();
 }
 

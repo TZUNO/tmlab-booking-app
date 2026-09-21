@@ -1,4 +1,4 @@
-import { EXTRA_OPEN_DATES, FIXED_TIME_SLOTS, HOLIDAYS } from "./data";
+import { EXTRA_OPEN_DATES, FIXED_TIME_SLOTS, HOLIDAYS, WEEKDAY_SWITCH_DATE } from "./data";
 import type { CalendarDateView, OpenDateConfig } from "./types";
 
 export function isHoliday(dateStr: string): { isHoliday: boolean; name?: string } {
@@ -39,9 +39,14 @@ export function getWeekdayIndex(dateStr: string): number {
   return new Date(`${dateStr}T12:00:00`).getDay();
 }
 
-export function isMondayOrThursday(dateStr: string): boolean {
+/**
+ * 固定開放日：週四不變，另一天於 WEEKDAY_SWITCH_DATE 當日起由週一改為週二。
+ * 切換日之前的日期仍以週一判定，保留歷史正確性。
+ */
+export function isFixedOpenDate(dateStr: string): boolean {
   const w = getWeekdayIndex(dateStr);
-  return w === 1 || w === 4;
+  if (w === 4) return true;
+  return w === (dateStr >= WEEKDAY_SWITCH_DATE ? 2 : 1);
 }
 
 /** 僅比較日曆日：dateStr 是否早於今天 */
@@ -57,7 +62,7 @@ export function addCalendarDays(dateStr: string, days: number): string {
 }
 
 /**
- * 含 startStr～endStr 內每個曆日：週一／週四固定開放（不含假日）＋ EXTRA_OPEN_DATES
+ * 含 startStr～endStr 內每個曆日：固定開放日（不含假日）＋ EXTRA_OPEN_DATES
  */
 export function buildOpenDateConfigsForInclusiveRange(startStr: string, endStr: string): OpenDateConfig[] {
   const map = new Map<string, OpenDateConfig>();
@@ -65,8 +70,7 @@ export function buildOpenDateConfigsForInclusiveRange(startStr: string, endStr: 
   const end = new Date(`${endStr}T12:00:00`);
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
     const date = toDateString(d);
-    const wd = d.getDay();
-    if (wd === 1 || wd === 4) {
+    if (isFixedOpenDate(date)) {
       if (!isHoliday(date).isHoliday) {
         map.set(date, {
           date,
@@ -156,7 +160,7 @@ export function coerceEndAfterStart(start: string, end: string, all: string[]): 
   return opts[0];
 }
 
-/** 產生「當月曆月」內週一／週四固定開放（不含假日）；供月曆顯示用 */
+/** 產生「當月曆月」內固定開放日（不含假日）；供月曆顯示用 */
 export function buildOpenDateConfigsForMonth(cursor: Date): OpenDateConfig[] {
   const y = cursor.getFullYear();
   const m = cursor.getMonth();
@@ -165,9 +169,8 @@ export function buildOpenDateConfigsForMonth(cursor: Date): OpenDateConfig[] {
 
   for (let day = 1; day <= lastDay; day += 1) {
     const d = new Date(y, m, day);
-    const wd = d.getDay();
-    if (wd === 1 || wd === 4) {
-      const date = toDateString(d);
+    const date = toDateString(d);
+    if (isFixedOpenDate(date)) {
       if (!isHoliday(date).isHoliday) {
         map.set(date, {
           date,
@@ -247,9 +250,8 @@ export function buildOpenDateConfigs(from = new Date(), weeks = 6): OpenDateConf
   for (let i = 0; i < totalDays; i += 1) {
     const d = new Date(start);
     d.setDate(start.getDate() + i);
-    const day = d.getDay();
-    if (day === 1 || day === 4) {
-      const date = toDateString(d);
+    const date = toDateString(d);
+    if (isFixedOpenDate(date)) {
       if (!isHoliday(date).isHoliday) {
         map.set(date, {
           date,

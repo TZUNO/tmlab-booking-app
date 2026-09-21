@@ -16,3 +16,6 @@ dist/
 # Local tooling (may contain nested git metadata)
 .codex/
 .vercel
+
+# Editor
+.vscode/
