@@ -7,7 +7,7 @@ export const STUDENT_GROUPS: StudentGroup[] = [
   { label: "職碩四", students: ["朱易晴", "張煥", "李泰頡"] },
   { label: "職碩三", students: ["何詩嬋", "蔡旻璇", "楊景惠", "邱苡甄", "李姍倪", "盧昱廷"] },
   { label: "職碩二", students: ["林倩如", "鄭力瑋", "謝芳芳", "詹睿騰"] },
-  { label: "職碩一", students: ["張筱蓓", "龐甄嬉", "顏慈君"] },
+  { label: "職碩一", students: ["張筱蓓", "龐甄嬉", "顏慈君", "莊博淵"] },
   { label: "交換未離校", students: ["趙怡捷", "朱容愷"] },
   { label: "其他", students: ["大學部 / 已畢業 / 外部"] },
 ];

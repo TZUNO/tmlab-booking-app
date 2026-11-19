@@ -289,24 +289,67 @@ function jsonOut_(obj) {
 }
 
 // ─────────────────────────────────────────────
-// 明日預約提醒 Email（週一、週三 21:30 自動發送）
+// 明日預約提醒 Email（週一、週三 21:00 準時發送）
 // ─────────────────────────────────────────────
+//
+// GAS 的「每日 atHour(21)」觸發器會在 21:00–22:00 間隨機執行，無法指定分鐘。
+// 為了在 21:00 準時寄出，改用兩段式：
+//   1. 每日 20:00–21:00 執行 scheduleTomorrowBookingEmail（排程器）
+//   2. 若當天是週一／週三，排程器建立一次性觸發器，於當天 21:00 執行
+//      sendTomorrowBookingEmailAt21，寄完後自行刪除該觸發器。
+// 設定方式：在編輯器執行一次 setupDailyEmailTrigger() 即可（會先清掉舊觸發器）。
 
 var NOTIFY_EMAIL = "kuroh.0103@gmail.com";
 
 var WEEKDAY_ZH = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
 
-/**
- * 每日 21:30 執行，只在固定開放日的前一天實際寄信。
- * 固定開放日自 2026-09-21 起為週二／週四，故於週一（1）、週三（3）寄出。
- * GAS Trigger 請設定 sendTomorrowBookingEmailIfNeeded，每日 21:00–22:00。
- */
-function sendTomorrowBookingEmailIfNeeded() {
+var EMAIL_SEND_HOUR = 21;
+var ONE_SHOT_HANDLER = "sendTomorrowBookingEmailAt21";
+
+/** 固定開放日自 2026-09-21 起為週二／週四，故於週一（1）、週三（3）寄出。 */
+function isEmailDay_(date) {
   var tz = Session.getScriptTimeZone();
+  var day = parseInt(Utilities.formatDate(date, tz, "u"), 10) % 7; // 0=Sun,1=Mon,...,6=Sat
+  return day === 1 || day === 3;
+}
+
+/** 每日 20:00–21:00 執行：週一、週三建立當天 21:00 的一次性寄信觸發器。 */
+function scheduleTomorrowBookingEmail() {
   var now = new Date();
-  var day = parseInt(Utilities.formatDate(now, tz, "u"), 10) % 7; // 0=Sun,1=Mon,...,6=Sat
-  if (day !== 1 && day !== 3) return; // 只在週一、週三執行
+  if (!isEmailDay_(now)) return;
+
+  deleteTriggersByHandler_(ONE_SHOT_HANDLER);
+
+  var tz = Session.getScriptTimeZone();
+  var todayYmd = Utilities.formatDate(now, tz, "yyyy-MM-dd");
+  var hh = (EMAIL_SEND_HOUR < 10 ? "0" : "") + EMAIL_SEND_HOUR;
+  var offset = Utilities.formatDate(now, tz, "XXX"); // 例如 +08:00
+  var target = new Date(todayYmd + "T" + hh + ":00:00" + offset);
+
+  if (target.getTime() <= now.getTime()) {
+    // 排程器跑晚了（已過 21:00）就直接寄
+    sendTomorrowBookingEmail_();
+    return;
+  }
+  ScriptApp.newTrigger(ONE_SHOT_HANDLER).timeBased().at(target).create();
+}
+
+/** 一次性觸發器：21:00 寄信後刪除自己。 */
+function sendTomorrowBookingEmailAt21() {
+  deleteTriggersByHandler_(ONE_SHOT_HANDLER);
   sendTomorrowBookingEmail_();
+}
+
+/** 舊版觸發器相容：若仍有每日 21 點觸發器呼叫此函式，照舊判斷寄信。 */
+function sendTomorrowBookingEmailIfNeeded() {
+  if (!isEmailDay_(new Date())) return;
+  sendTomorrowBookingEmail_();
+}
+
+function deleteTriggersByHandler_(handler) {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === handler) ScriptApp.deleteTrigger(t);
+  });
 }
 
 /**
@@ -399,25 +442,23 @@ function slotStartKey_(slot) {
 }
 
 /**
- * 建立每日 21:00–22:00 的時間觸發器（只需執行一次）。
- * 若已有相同觸發器請勿重複執行，或先呼叫 removeDailyTrigger()。
+ * 建立觸發器（只需執行一次）：先清掉所有寄信相關觸發器，
+ * 再建立每日 20:00–21:00 的排程器 scheduleTomorrowBookingEmail。
  */
 function setupDailyEmailTrigger() {
-  ScriptApp.newTrigger("sendTomorrowBookingEmailIfNeeded")
+  removeDailyEmailTrigger();
+  ScriptApp.newTrigger("scheduleTomorrowBookingEmail")
     .timeBased()
     .everyDays(1)
-    .atHour(21)
+    .atHour(EMAIL_SEND_HOUR - 1)
     .create();
-  Logger.log("已建立每日 21:00–22:00 觸發器");
+  Logger.log("已建立每日排程器；週一、週三將於 21:00 寄出明日預約");
 }
 
-/** 移除所有 sendTomorrowBookingEmailIfNeeded 觸發器（用於重設）。 */
+/** 移除所有寄信相關觸發器（用於重設）。 */
 function removeDailyEmailTrigger() {
-  var triggers = ScriptApp.getProjectTriggers();
-  triggers.forEach(function (t) {
-    if (t.getHandlerFunction() === "sendTomorrowBookingEmailIfNeeded") {
-      ScriptApp.deleteTrigger(t);
-    }
-  });
+  deleteTriggersByHandler_("sendTomorrowBookingEmailIfNeeded");
+  deleteTriggersByHandler_("scheduleTomorrowBookingEmail");
+  deleteTriggersByHandler_(ONE_SHOT_HANDLER);
   Logger.log("已移除觸發器");
 }
